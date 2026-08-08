@@ -1,0 +1,16 @@
+use uuid::Uuid;
+
+
+#[derive(Debug, Clone)]
+pub struct User {
+    pub id: Uuid,
+    pub email: String,
+}
+
+
+#[derive(Debug, Clone)]
+pub struct UserCredentials {
+    pub id: Uuid,
+    pub email: String,
+    pub password_hash: String,
+}

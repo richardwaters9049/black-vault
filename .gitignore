@@ -1,0 +1,19 @@
+# Rust
+**/target/
+
+# Environment variables
+**/.env
+**/.env.local
+**/.env.*.local
+
+# macOS
+.DS_Store
+
+# IDEs / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log

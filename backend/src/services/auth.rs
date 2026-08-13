@@ -11,7 +11,11 @@ use argon2::{
 
 use sqlx::PgPool;
 
-use crate::database::users::create_user;
+use crate::database::users::{
+    create_user,
+    find_user_by_email,
+};
+
 use crate::models::user::UserCredentials;
 
 
@@ -87,34 +91,122 @@ pub async fn register_user(
     let password_hash =
         hash_password(password)?;
 
-    create_user(
-        pool,
-        &email,
-        &password_hash,
-    )
-    .await
-    .map_err(|error| {
+    let user =
+        create_user(
+            pool,
+            &email,
+            &password_hash,
+        )
+        .await
+        .map_err(|error| {
 
-        if let sqlx::Error::Database(
-            database_error
-        ) = &error {
+            if let sqlx::Error::Database(
+                database_error
+            ) = &error {
 
-            if database_error.constraint()
-                == Some("users_email_key")
-            {
-                return "An account with that email already exists"
-                    .to_string();
+                if database_error.constraint()
+                    == Some("users_email_key")
+                {
+                    return "An account with that email already exists"
+                        .to_string();
+                }
             }
+
+            tracing::error!(
+                error = ?error,
+                "Failed to create user"
+            );
+
+            "Unable to create account"
+                .to_string()
+        })?;
+
+    Ok(
+        UserCredentials {
+            id: user.id,
+            email: user.email,
+            password_hash: user.password_hash,
         }
+    )
+}
 
-        tracing::error!(
-            error = ?error,
-            "Failed to create user"
+
+pub async fn login_user(
+    pool: &PgPool,
+    email: &str,
+    password: &str,
+) -> Result<UserCredentials, String> {
+
+    let email =
+        email
+            .trim()
+            .to_lowercase();
+
+    if email.is_empty() {
+        return Err(
+            "Email is required"
+                .to_string()
         );
+    }
 
-        "Unable to create account"
-            .to_string()
-    })
+    if password.is_empty() {
+        return Err(
+            "Password is required"
+                .to_string()
+        );
+    }
+
+    let user =
+        find_user_by_email(
+            pool,
+            &email,
+        )
+        .await
+        .map_err(|error| {
+
+            tracing::error!(
+                error = ?error,
+                "Failed to find user during login"
+            );
+
+            "Unable to authenticate".to_string()
+        })?;
+
+    let user =
+        user.ok_or_else(|| {
+            "Invalid email or password"
+                .to_string()
+        })?;
+
+    let password_valid =
+        verify_password(
+            password,
+            &user.password_hash,
+        )
+        .map_err(|error| {
+
+            tracing::error!(
+                error = %error,
+                "Failed to verify password"
+            );
+
+            "Unable to authenticate".to_string()
+        })?;
+
+    if !password_valid {
+        return Err(
+            "Invalid email or password"
+                .to_string()
+        );
+    }
+
+    Ok(
+        UserCredentials {
+            id: user.id,
+            email: user.email,
+            password_hash: user.password_hash,
+        }
+    )
 }
 
 
@@ -127,6 +219,8 @@ mod tests {
 
 
     async fn test_pool() -> PgPool {
+
+        dotenvy::dotenv().ok();
 
         let database_url =
             std::env::var("DATABASE_URL")
@@ -260,7 +354,9 @@ mod tests {
             );
 
         let expected_email =
-            email.to_lowercase();
+            email
+                .trim()
+                .to_lowercase();
 
         let user =
             register_user(
@@ -296,27 +392,241 @@ mod tests {
         let pool =
             test_pool().await;
 
-        let email =
-            format!(
-                "short-{}@blackvault.local",
-                Uuid::new_v4()
-            );
-
         let result =
             register_user(
                 &pool,
-                &email,
+                "short-password@blackvault.local",
                 "short",
             )
             .await;
 
-        assert!(
-            result.is_err()
+        match result {
+            Err(error) => {
+                assert_eq!(
+                    error,
+                    "Password must be at least 12 characters"
+                );
+            }
+            Ok(_) => {
+                panic!(
+                    "Expected short password to be rejected"
+                );
+            }
+        }
+    }
+
+
+    #[tokio::test]
+    async fn login_user_accepts_correct_password() {
+
+        let pool =
+            test_pool().await;
+
+        let email =
+            format!(
+                "login-success-{}@blackvault.local",
+                Uuid::new_v4()
+            );
+
+        let password =
+            "super_secure_login_password";
+
+        let registered_user =
+            register_user(
+                &pool,
+                &email,
+                password,
+            )
+            .await
+            .expect(
+                "Failed to register login test user"
+            );
+
+        let logged_in_user =
+            login_user(
+                &pool,
+                &email,
+                password,
+            )
+            .await
+            .expect(
+                "Expected login to succeed"
+            );
+
+        assert_eq!(
+            logged_in_user.id,
+            registered_user.id
         );
 
         assert_eq!(
-            result.unwrap_err(),
-            "Password must be at least 12 characters"
+            logged_in_user.email,
+            email
+        );
+
+        sqlx::query!(
+            "DELETE FROM users WHERE id = $1",
+            registered_user.id
+        )
+        .execute(&pool)
+        .await
+        .expect(
+            "Failed to clean up login test user"
+        );
+    }
+
+
+    #[tokio::test]
+    async fn login_user_rejects_wrong_password() {
+
+        let pool =
+            test_pool().await;
+
+        let email =
+            format!(
+                "login-failure-{}@blackvault.local",
+                Uuid::new_v4()
+            );
+
+        let password =
+            "super_secure_login_password";
+
+        let registered_user =
+            register_user(
+                &pool,
+                &email,
+                password,
+            )
+            .await
+            .expect(
+                "Failed to register login test user"
+            );
+
+        let result =
+            login_user(
+                &pool,
+                &email,
+                "definitely-wrong-password",
+            )
+            .await;
+
+        match result {
+            Err(error) => {
+                assert_eq!(
+                    error,
+                    "Invalid email or password"
+                );
+            }
+            Ok(_) => {
+                panic!(
+                    "Expected login with wrong password to fail"
+                );
+            }
+        }
+
+        sqlx::query!(
+            "DELETE FROM users WHERE id = $1",
+            registered_user.id
+        )
+        .execute(&pool)
+        .await
+        .expect(
+            "Failed to clean up login test user"
+        );
+    }
+
+
+    #[tokio::test]
+    async fn login_user_rejects_unknown_email() {
+
+        let pool =
+            test_pool().await;
+
+        let email =
+            format!(
+                "does-not-exist-{}@blackvault.local",
+                Uuid::new_v4()
+            );
+
+        let result =
+            login_user(
+                &pool,
+                &email,
+                "some_password",
+            )
+            .await;
+
+        match result {
+            Err(error) => {
+                assert_eq!(
+                    error,
+                    "Invalid email or password"
+                );
+            }
+            Ok(_) => {
+                panic!(
+                    "Expected login with unknown email to fail"
+                );
+            }
+        }
+    }
+
+
+    #[tokio::test]
+    async fn login_user_normalises_email() {
+
+        let pool =
+            test_pool().await;
+
+        let email =
+            format!(
+                "login-normalise-{}@blackvault.local",
+                Uuid::new_v4()
+            );
+
+        let password =
+            "super_secure_login_password";
+
+        let registered_user =
+            register_user(
+                &pool,
+                &email,
+                password,
+            )
+            .await
+            .expect(
+                "Failed to register login test user"
+            );
+
+        let input_email =
+            format!(
+                "  {}  ",
+                email.to_uppercase()
+            );
+
+        let logged_in_user =
+            login_user(
+                &pool,
+                &input_email,
+                password,
+            )
+            .await
+            .expect(
+                "Expected normalised login to succeed"
+            );
+
+        assert_eq!(
+            logged_in_user.id,
+            registered_user.id
+        );
+
+        sqlx::query!(
+            "DELETE FROM users WHERE id = $1",
+            registered_user.id
+        )
+        .execute(&pool)
+        .await
+        .expect(
+            "Failed to clean up login test user"
         );
     }
 }

@@ -10,8 +10,10 @@ use axum::{
 
 use dotenvy::dotenv;
 
-use api::auth::register;
-
+use api::auth::{
+    login,
+    register,
+};
 
 #[tokio::main]
 async fn main() {
@@ -30,6 +32,10 @@ async fn main() {
             "/auth/register",
             post(register),
         )
+        .route(
+            "/auth/login",
+            post(login),
+        )
         .with_state(pool);
 
     let listener =
@@ -45,7 +51,7 @@ async fn main() {
 
     axum::serve(
         listener,
-        app
+        app,
     )
     .await
     .expect("Server error");

@@ -13,6 +13,8 @@ use sqlx::PgPool;
 
 use uuid::Uuid;
 
+use crate::config::Config;
+
 use crate::services::auth::{
     login_user,
     register_user,
@@ -31,7 +33,7 @@ pub struct RegisterResponse {
 }
 
 pub async fn register(
-    State(pool): State<PgPool>,
+    State((pool, config)): State<(PgPool, Config)>,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<
     (StatusCode, Json<RegisterResponse>),
@@ -71,6 +73,8 @@ pub async fn register(
             )
         })?;
 
+    let _ = config;
+
     Ok((
         StatusCode::CREATED,
         Json(
@@ -92,20 +96,23 @@ pub struct LoginRequest {
 pub struct LoginResponse {
     pub id: Uuid,
     pub email: String,
+    pub token: String,
 }
 
 pub async fn login(
-    State(pool): State<PgPool>,
+    State((pool, config)): State<(PgPool, Config)>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<
     (StatusCode, Json<LoginResponse>),
     (StatusCode, String),
 > {
-    let user =
+    let (user, token) =
         login_user(
             &pool,
             &payload.email,
             &payload.password,
+            &config.jwt_secret,
+            config.jwt_expiration,
         )
         .await
         .map_err(|error| {
@@ -130,6 +137,7 @@ pub async fn login(
             LoginResponse {
                 id: user.id,
                 email: user.email,
+                token,
             }
         ),
     ))

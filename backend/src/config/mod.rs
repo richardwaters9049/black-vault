@@ -5,6 +5,8 @@ pub struct Config {
     pub database_url: String,
     pub host: String,
     pub port: u16,
+    pub jwt_secret: String,
+    pub jwt_expiration: u64,
 }
 
 impl Config {
@@ -24,10 +26,32 @@ impl Config {
             .parse::<u16>()
             .map_err(|_| "PORT must be a valid number".to_string())?;
 
+        let jwt_secret = env::var("JWT_SECRET")
+            .map_err(|_| "JWT_SECRET is not configured".to_string())?;
+
+        if jwt_secret.trim().is_empty() {
+            return Err("JWT_SECRET cannot be empty".to_string());
+        }
+
+        let jwt_expiration = env::var("JWT_EXPIRATION")
+            .unwrap_or_else(|_| "3600".to_string())
+            .parse::<u64>()
+            .map_err(|_| {
+                "JWT_EXPIRATION must be a valid number".to_string()
+            })?;
+
+        if jwt_expiration == 0 {
+            return Err(
+                "JWT_EXPIRATION must be greater than zero".to_string()
+            );
+        }
+
         Ok(Self {
             database_url,
             host,
             port,
+            jwt_secret,
+            jwt_expiration,
         })
     }
 }

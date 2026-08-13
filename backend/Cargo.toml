@@ -31,3 +31,4 @@ rand = "0.8"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 dotenvy = "0.15.7"
+jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }

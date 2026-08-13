@@ -46,7 +46,10 @@ async fn main() {
             "/auth/login",
             post(login),
         )
-        .with_state(pool);
+        .with_state((
+            pool,
+            config.clone(),
+        ));
 
     let address = format!(
         "{}:{}",
@@ -54,9 +57,10 @@ async fn main() {
         config.port
     );
 
-    let listener = tokio::net::TcpListener::bind(&address)
-        .await
-        .expect("Failed to bind server");
+    let listener =
+        tokio::net::TcpListener::bind(&address)
+            .await
+            .expect("Failed to bind server");
 
     tracing::info!(
         "Black Vault API running on http://{}:{}",

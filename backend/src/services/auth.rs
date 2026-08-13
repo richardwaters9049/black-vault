@@ -11,6 +11,8 @@ use argon2::{
 
 use sqlx::PgPool;
 
+use uuid::Uuid;
+
 use crate::database::users::{
     create_user,
     find_user_by_email,
@@ -18,11 +20,11 @@ use crate::database::users::{
 
 use crate::models::user::UserCredentials;
 
+use crate::services::jwt::create_token;
 
 pub fn hash_password(
     password: &str,
 ) -> Result<String, String> {
-
     let salt =
         SaltString::generate(
             &mut OsRng
@@ -40,12 +42,10 @@ pub fn hash_password(
         .map_err(|error| error.to_string())
 }
 
-
 pub fn verify_password(
     password: &str,
     stored_hash: &str,
 ) -> Result<bool, String> {
-
     let parsed_hash =
         PasswordHash::new(
             stored_hash
@@ -62,13 +62,11 @@ pub fn verify_password(
     )
 }
 
-
 pub async fn register_user(
     pool: &PgPool,
     email: &str,
     password: &str,
 ) -> Result<UserCredentials, String> {
-
     if password.len() < 12 {
         return Err(
             "Password must be at least 12 characters"
@@ -99,11 +97,9 @@ pub async fn register_user(
         )
         .await
         .map_err(|error| {
-
             if let sqlx::Error::Database(
                 database_error
             ) = &error {
-
                 if database_error.constraint()
                     == Some("users_email_key")
                 {
@@ -130,13 +126,13 @@ pub async fn register_user(
     )
 }
 
-
 pub async fn login_user(
     pool: &PgPool,
     email: &str,
     password: &str,
-) -> Result<UserCredentials, String> {
-
+    jwt_secret: &str,
+    jwt_expiration: u64,
+) -> Result<(UserCredentials, String), String> {
     let email =
         email
             .trim()
@@ -163,7 +159,6 @@ pub async fn login_user(
         )
         .await
         .map_err(|error| {
-
             tracing::error!(
                 error = ?error,
                 "Failed to find user during login"
@@ -184,7 +179,6 @@ pub async fn login_user(
             &user.password_hash,
         )
         .map_err(|error| {
-
             tracing::error!(
                 error = %error,
                 "Failed to verify password"
@@ -200,26 +194,38 @@ pub async fn login_user(
         );
     }
 
-    Ok(
+    let token =
+        create_token(
+            user.id,
+            jwt_secret,
+            jwt_expiration,
+        )
+        .map_err(|error| {
+            tracing::error!(
+                error = %error,
+                "Failed to create authentication token"
+            );
+
+            "Unable to authenticate".to_string()
+        })?;
+
+    Ok((
         UserCredentials {
             id: user.id,
             email: user.email,
             password_hash: user.password_hash,
-        }
-    )
+        },
+        token,
+    ))
 }
-
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     use uuid::Uuid;
 
-
     async fn test_pool() -> PgPool {
-
         dotenvy::dotenv().ok();
 
         let database_url =
@@ -235,10 +241,16 @@ mod tests {
             )
     }
 
+    fn test_jwt_secret() -> &'static str {
+        "test-black-vault-jwt-secret"
+    }
+
+    fn test_jwt_expiration() -> u64 {
+        3600
+    }
 
     #[test]
     fn password_hash_works() {
-
         let password =
             "super_secret_password";
 
@@ -255,10 +267,8 @@ mod tests {
         );
     }
 
-
     #[test]
     fn password_hash_rejects_wrong_password() {
-
         let password =
             "super_secret_password";
 
@@ -278,10 +288,8 @@ mod tests {
         );
     }
 
-
     #[tokio::test]
     async fn register_user_creates_hashed_user() {
-
         let pool =
             test_pool().await;
 
@@ -340,10 +348,8 @@ mod tests {
         );
     }
 
-
     #[tokio::test]
     async fn register_user_normalises_email() {
-
         let pool =
             test_pool().await;
 
@@ -385,10 +391,8 @@ mod tests {
         );
     }
 
-
     #[tokio::test]
     async fn register_user_rejects_short_password() {
-
         let pool =
             test_pool().await;
 
@@ -415,10 +419,8 @@ mod tests {
         }
     }
 
-
     #[tokio::test]
     async fn login_user_accepts_correct_password() {
-
         let pool =
             test_pool().await;
 
@@ -442,11 +444,13 @@ mod tests {
                 "Failed to register login test user"
             );
 
-        let logged_in_user =
+        let (logged_in_user, token) =
             login_user(
                 &pool,
                 &email,
                 password,
+                test_jwt_secret(),
+                test_jwt_expiration(),
             )
             .await
             .expect(
@@ -463,6 +467,10 @@ mod tests {
             email
         );
 
+        assert!(
+            !token.is_empty()
+        );
+
         sqlx::query!(
             "DELETE FROM users WHERE id = $1",
             registered_user.id
@@ -474,10 +482,8 @@ mod tests {
         );
     }
 
-
     #[tokio::test]
     async fn login_user_rejects_wrong_password() {
-
         let pool =
             test_pool().await;
 
@@ -506,6 +512,8 @@ mod tests {
                 &pool,
                 &email,
                 "definitely-wrong-password",
+                test_jwt_secret(),
+                test_jwt_expiration(),
             )
             .await;
 
@@ -534,10 +542,8 @@ mod tests {
         );
     }
 
-
     #[tokio::test]
     async fn login_user_rejects_unknown_email() {
-
         let pool =
             test_pool().await;
 
@@ -552,6 +558,8 @@ mod tests {
                 &pool,
                 &email,
                 "some_password",
+                test_jwt_secret(),
+                test_jwt_expiration(),
             )
             .await;
 
@@ -570,10 +578,8 @@ mod tests {
         }
     }
 
-
     #[tokio::test]
     async fn login_user_normalises_email() {
-
         let pool =
             test_pool().await;
 
@@ -603,11 +609,13 @@ mod tests {
                 email.to_uppercase()
             );
 
-        let logged_in_user =
+        let (logged_in_user, token) =
             login_user(
                 &pool,
                 &input_email,
                 password,
+                test_jwt_secret(),
+                test_jwt_expiration(),
             )
             .await
             .expect(
@@ -617,6 +625,15 @@ mod tests {
         assert_eq!(
             logged_in_user.id,
             registered_user.id
+        );
+
+        assert_eq!(
+            logged_in_user.email,
+            email
+        );
+
+        assert!(
+            !token.is_empty()
         );
 
         sqlx::query!(

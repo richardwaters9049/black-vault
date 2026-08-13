@@ -1,4 +1,5 @@
 mod api;
+mod config;
 mod database;
 mod models;
 mod services;
@@ -15,17 +16,26 @@ use api::auth::{
     register,
 };
 
+use config::Config;
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
 
     tracing_subscriber::fmt::init();
 
-    let pool = database::connect()
-        .await
-        .expect("Failed to connect to database");
+    let config = Config::from_env()
+        .expect("Failed to load application configuration");
 
-    println!("Database connected");
+    let pool = database::connect(
+        &config.database_url,
+    )
+    .await
+    .expect("Failed to connect to database");
+
+    tracing::info!(
+        "Database connected"
+    );
 
     let app = Router::new()
         .route(
@@ -38,15 +48,20 @@ async fn main() {
         )
         .with_state(pool);
 
-    let listener =
-        tokio::net::TcpListener::bind(
-            "0.0.0.0:8080"
-        )
+    let address = format!(
+        "{}:{}",
+        config.host,
+        config.port
+    );
+
+    let listener = tokio::net::TcpListener::bind(&address)
         .await
         .expect("Failed to bind server");
 
-    println!(
-        "Black Vault API running on http://localhost:8080"
+    tracing::info!(
+        "Black Vault API running on http://{}:{}",
+        config.host,
+        config.port
     );
 
     axum::serve(

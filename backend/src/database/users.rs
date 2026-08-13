@@ -65,6 +65,30 @@ pub async fn find_user_by_email(
     Ok(user)
 }
 
+pub async fn find_user_by_id(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<Option<UserRecord>, sqlx::Error> {
+
+    let user =
+        sqlx::query_as!(
+            UserRecord,
+            r#"
+            SELECT
+                id,
+                email,
+                password_hash
+            FROM users
+            WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_optional(pool)
+        .await?;
+
+    Ok(user)
+}
+
 
 #[cfg(test)]
 mod tests {

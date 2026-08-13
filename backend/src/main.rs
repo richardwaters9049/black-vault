@@ -1,22 +1,33 @@
 mod api;
 mod config;
 mod database;
+mod middleware;
 mod models;
 mod services;
 
 use axum::{
-    routing::post,
+    routing::{
+        get,
+        post,
+    },
     Router,
 };
 
 use dotenvy::dotenv;
 
+use tower_http::cors::{
+    Any,
+    CorsLayer,
+};
+
 use api::auth::{
     login,
     register,
 };
+use api::user::me;
 
 use config::Config;
+use middleware::auth::authenticate;
 
 #[tokio::main]
 async fn main() {
@@ -37,7 +48,16 @@ async fn main() {
         "Database connected"
     );
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = Router::new()
+        .route(
+            "/health",
+            get(health_check),
+        )
         .route(
             "/auth/register",
             post(register),
@@ -46,6 +66,15 @@ async fn main() {
             "/auth/login",
             post(login),
         )
+        .route(
+            "/user/me",
+            get(me),
+        )
+        .route_layer(axum::middleware::from_fn_with_state(
+            config.clone(),
+            authenticate,
+        ))
+        .layer(cors)
         .with_state((
             pool,
             config.clone(),
@@ -74,4 +103,8 @@ async fn main() {
     )
     .await
     .expect("Server error");
+}
+
+async fn health_check() -> &'static str {
+    "OK"
 }

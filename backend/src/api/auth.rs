@@ -13,6 +13,7 @@ use sqlx::PgPool;
 
 use uuid::Uuid;
 
+use crate::api::error::ErrorResponse;
 use crate::config::Config;
 
 use crate::services::auth::{
@@ -33,11 +34,11 @@ pub struct RegisterResponse {
 }
 
 pub async fn register(
-    State((pool, config)): State<(PgPool, Config)>,
+    State((pool, _config)): State<(PgPool, Config)>,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<
     (StatusCode, Json<RegisterResponse>),
-    (StatusCode, String),
+    ErrorResponse,
 > {
     let user =
         register_user(
@@ -46,34 +47,7 @@ pub async fn register(
             &payload.password,
         )
         .await
-        .map_err(|error| {
-            if error
-                == "An account with that email already exists"
-            {
-                return (
-                    StatusCode::CONFLICT,
-                    error,
-                );
-            }
-
-            if error
-                == "Password must be at least 12 characters"
-                || error
-                    == "Email is required"
-            {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    error,
-                );
-            }
-
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                error,
-            )
-        })?;
-
-    let _ = config;
+        .map_err(|error| ErrorResponse { error })?;
 
     Ok((
         StatusCode::CREATED,
@@ -104,32 +78,20 @@ pub async fn login(
     Json(payload): Json<LoginRequest>,
 ) -> Result<
     (StatusCode, Json<LoginResponse>),
-    (StatusCode, String),
+    ErrorResponse,
 > {
-    let (user, token) =
+    let (
+        user,
+        token,
+    ) =
         login_user(
             &pool,
+            &config,
             &payload.email,
             &payload.password,
-            &config.jwt_secret,
-            config.jwt_expiration,
         )
         .await
-        .map_err(|error| {
-            if error
-                == "Invalid email or password"
-            {
-                return (
-                    StatusCode::UNAUTHORIZED,
-                    error,
-                );
-            }
-
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                error,
-            )
-        })?;
+        .map_err(|error| ErrorResponse { error })?;
 
     Ok((
         StatusCode::OK,

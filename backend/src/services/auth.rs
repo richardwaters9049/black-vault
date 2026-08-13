@@ -11,7 +11,7 @@ use argon2::{
 
 use sqlx::PgPool;
 
-use uuid::Uuid;
+use crate::config::Config;
 
 use crate::database::users::{
     create_user,
@@ -62,29 +62,56 @@ pub fn verify_password(
     )
 }
 
+fn validate_email(email: &str) -> Result<(), String> {
+    let email = email.trim().to_lowercase();
+    
+    if email.is_empty() {
+        return Err("Email is required".to_string());
+    }
+    
+    let email_regex = regex::Regex::new(
+        r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    ).map_err(|_| "Invalid email validation pattern".to_string())?;
+    
+    if !email_regex.is_match(&email) {
+        return Err("Invalid email format".to_string());
+    }
+    
+    Ok(())
+}
+
+fn validate_password(password: &str) -> Result<(), String> {
+    if password.len() < 12 {
+        return Err("Password must be at least 12 characters".to_string());
+    }
+    
+    if !password.chars().any(|c| c.is_ascii_uppercase()) {
+        return Err("Password must contain at least one uppercase letter".to_string());
+    }
+    
+    if !password.chars().any(|c| c.is_ascii_lowercase()) {
+        return Err("Password must contain at least one lowercase letter".to_string());
+    }
+    
+    if !password.chars().any(|c| c.is_ascii_digit()) {
+        return Err("Password must contain at least one digit".to_string());
+    }
+    
+    Ok(())
+}
+
 pub async fn register_user(
     pool: &PgPool,
     email: &str,
     password: &str,
 ) -> Result<UserCredentials, String> {
-    if password.len() < 12 {
-        return Err(
-            "Password must be at least 12 characters"
-                .to_string()
-        );
-    }
+    validate_email(email)?;
+    validate_password(password)?;
 
     let email =
         email
             .trim()
             .to_lowercase();
-
-    if email.is_empty() {
-        return Err(
-            "Email is required"
-                .to_string()
-        );
-    }
 
     let password_hash =
         hash_password(password)?;
@@ -100,6 +127,7 @@ pub async fn register_user(
             if let sqlx::Error::Database(
                 database_error
             ) = &error {
+
                 if database_error.constraint()
                     == Some("users_email_key")
                 {
@@ -128,10 +156,9 @@ pub async fn register_user(
 
 pub async fn login_user(
     pool: &PgPool,
+    config: &Config,
     email: &str,
     password: &str,
-    jwt_secret: &str,
-    jwt_expiration: u64,
 ) -> Result<(UserCredentials, String), String> {
     let email =
         email
@@ -195,28 +222,33 @@ pub async fn login_user(
     }
 
     let token =
-        create_token(
-            user.id,
-            jwt_secret,
-            jwt_expiration,
-        )
-        .map_err(|error| {
-            tracing::error!(
-                error = %error,
-                "Failed to create authentication token"
-            );
+    create_token(
+        user.id,
+        &config.jwt_secret,
+        config.jwt_expiration,
+    )
+    .map_err(|error| {
+        tracing::error!(
+            error = %error,
+            "Failed to create authentication token"
+        );
 
-            "Unable to authenticate".to_string()
-        })?;
+        "Unable to authenticate".to_string()
+    })?;
 
-    Ok((
+    let credentials =
         UserCredentials {
             id: user.id,
             email: user.email,
             password_hash: user.password_hash,
-        },
-        token,
-    ))
+        };
+
+    Ok(
+        (
+            credentials,
+            token,
+        )
+    )
 }
 
 #[cfg(test)]
@@ -241,12 +273,26 @@ mod tests {
             )
     }
 
-    fn test_jwt_secret() -> &'static str {
-        "test-black-vault-jwt-secret"
-    }
+    fn test_config() -> Config {
+        Config {
+            database_url:
+                "postgres://test@localhost/test"
+                    .to_string(),
 
-    fn test_jwt_expiration() -> u64 {
-        3600
+            host:
+                "127.0.0.1"
+                    .to_string(),
+
+            port:
+                8080,
+
+            jwt_secret:
+                "test-jwt-secret"
+                    .to_string(),
+
+            jwt_expiration:
+                3600,
+        }
     }
 
     #[test]
@@ -300,7 +346,7 @@ mod tests {
             );
 
         let password =
-            "super_secure_test_password";
+            "SuperSecure123Test";
 
         let user =
             register_user(
@@ -368,7 +414,7 @@ mod tests {
             register_user(
                 &pool,
                 &email,
-                "super_secure_test_password",
+                "SuperSecure123Test",
             )
             .await
             .expect(
@@ -411,6 +457,7 @@ mod tests {
                     "Password must be at least 12 characters"
                 );
             }
+
             Ok(_) => {
                 panic!(
                     "Expected short password to be rejected"
@@ -424,6 +471,9 @@ mod tests {
         let pool =
             test_pool().await;
 
+        let config =
+            test_config();
+
         let email =
             format!(
                 "login-success-{}@blackvault.local",
@@ -431,7 +481,7 @@ mod tests {
             );
 
         let password =
-            "super_secure_login_password";
+            "SuperSecure123Login";
 
         let registered_user =
             register_user(
@@ -444,13 +494,15 @@ mod tests {
                 "Failed to register login test user"
             );
 
-        let (logged_in_user, token) =
+        let (
+            logged_in_user,
+            token,
+        ) =
             login_user(
                 &pool,
+                &config,
                 &email,
                 password,
-                test_jwt_secret(),
-                test_jwt_expiration(),
             )
             .await
             .expect(
@@ -487,6 +539,9 @@ mod tests {
         let pool =
             test_pool().await;
 
+        let config =
+            test_config();
+
         let email =
             format!(
                 "login-failure-{}@blackvault.local",
@@ -494,7 +549,7 @@ mod tests {
             );
 
         let password =
-            "super_secure_login_password";
+            "SuperSecure123Login";
 
         let registered_user =
             register_user(
@@ -510,10 +565,9 @@ mod tests {
         let result =
             login_user(
                 &pool,
+                &config,
                 &email,
                 "definitely-wrong-password",
-                test_jwt_secret(),
-                test_jwt_expiration(),
             )
             .await;
 
@@ -524,6 +578,7 @@ mod tests {
                     "Invalid email or password"
                 );
             }
+
             Ok(_) => {
                 panic!(
                     "Expected login with wrong password to fail"
@@ -547,6 +602,9 @@ mod tests {
         let pool =
             test_pool().await;
 
+        let config =
+            test_config();
+
         let email =
             format!(
                 "does-not-exist-{}@blackvault.local",
@@ -556,10 +614,9 @@ mod tests {
         let result =
             login_user(
                 &pool,
+                &config,
                 &email,
                 "some_password",
-                test_jwt_secret(),
-                test_jwt_expiration(),
             )
             .await;
 
@@ -570,6 +627,7 @@ mod tests {
                     "Invalid email or password"
                 );
             }
+
             Ok(_) => {
                 panic!(
                     "Expected login with unknown email to fail"
@@ -583,6 +641,9 @@ mod tests {
         let pool =
             test_pool().await;
 
+        let config =
+            test_config();
+
         let email =
             format!(
                 "login-normalise-{}@blackvault.local",
@@ -590,7 +651,7 @@ mod tests {
             );
 
         let password =
-            "super_secure_login_password";
+            "SuperSecure123Login";
 
         let registered_user =
             register_user(
@@ -609,13 +670,15 @@ mod tests {
                 email.to_uppercase()
             );
 
-        let (logged_in_user, token) =
+        let (
+            logged_in_user,
+            token,
+        ) =
             login_user(
                 &pool,
+                &config,
                 &input_email,
                 password,
-                test_jwt_secret(),
-                test_jwt_expiration(),
             )
             .await
             .expect(

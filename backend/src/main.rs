@@ -53,27 +53,20 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let app = Router::new()
-        .route(
-            "/health",
-            get(health_check),
-        )
-        .route(
-            "/auth/register",
-            post(register),
-        )
-        .route(
-            "/auth/login",
-            post(login),
-        )
-        .route(
-            "/user/me",
-            get(me),
-        )
+    let public_routes = Router::new()
+        .route("/health", get(health_check))
+        .route("/auth/register", post(register))
+        .route("/auth/login", post(login));
+
+    let protected_routes = Router::new()
+        .route("/user/me", get(me))
         .route_layer(axum::middleware::from_fn_with_state(
             config.clone(),
             authenticate,
-        ))
+        ));
+
+    let app: Router = public_routes
+        .merge(protected_routes)
         .layer(cors)
         .with_state((
             pool,

@@ -5,6 +5,9 @@ import {
   RegisterRequest,
   LoginRequest,
   ApiError as ApiErrorType,
+  SetupVaultRequest,
+  SetupVaultResponse,
+  GetVaultKeyResponse,
 } from "./types";
 
 class ApiError extends Error {
@@ -57,5 +60,30 @@ export const api = {
   async healthCheck(): Promise<string> {
     const response = await fetch(`${API_URL}/health`);
     return response.text();
+  },
+
+  async setupVault(
+    token: string,
+    data: SetupVaultRequest,
+  ): Promise<SetupVaultResponse> {
+    const response = await fetch(`${API_URL}/vault/setup`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<SetupVaultResponse>(response);
+  },
+
+  async getVaultKey(token: string): Promise<GetVaultKeyResponse> {
+    const response = await fetch(`${API_URL}/vault/key`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return handleResponse<GetVaultKeyResponse>(response);
   },
 };

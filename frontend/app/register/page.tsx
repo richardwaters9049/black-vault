@@ -6,6 +6,7 @@ import Link from 'next/link';
 
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
+import { generateVaultKey, encryptVaultKey } from '@/lib/crypto';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,8 @@ export default function RegisterPage() {
     email: '',
     password: '',
     confirmPassword: '',
+    vaultPassword: '',
+    confirmVaultPassword: '',
   });
 
   const [error, setError] = useState('');
@@ -28,7 +31,9 @@ export default function RegisterPage() {
     if (
       !formData.email ||
       !formData.password ||
-      !formData.confirmPassword
+      !formData.confirmPassword ||
+      !formData.vaultPassword ||
+      !formData.confirmVaultPassword
     ) {
       setError('All fields are required');
       return false;
@@ -66,6 +71,31 @@ export default function RegisterPage() {
       return false;
     }
 
+    if (formData.vaultPassword.length < 12) {
+      setError('Vault password must be at least 12 characters');
+      return false;
+    }
+
+    if (!/[A-Z]/.test(formData.vaultPassword)) {
+      setError('Vault password must contain at least one uppercase letter');
+      return false;
+    }
+
+    if (!/[a-z]/.test(formData.vaultPassword)) {
+      setError('Vault password must contain at least one lowercase letter');
+      return false;
+    }
+
+    if (!/[0-9]/.test(formData.vaultPassword)) {
+      setError('Vault password must contain at least one digit');
+      return false;
+    }
+
+    if (formData.vaultPassword !== formData.confirmVaultPassword) {
+      setError('Vault passwords do not match');
+      return false;
+    }
+
     return true;
   };
 
@@ -93,6 +123,16 @@ export default function RegisterPage() {
       login(authResponse.token, {
         id: authResponse.id,
         email: authResponse.email,
+      });
+
+      const vaultKey = generateVaultKey();
+      const vaultEnvelope = await encryptVaultKey(vaultKey, formData.vaultPassword);
+
+      await api.setupVault(authResponse.token, {
+        encrypted_vault_key: vaultEnvelope.encrypted_vault_key,
+        key_derivation_salt: vaultEnvelope.key_derivation_salt,
+        key_derivation_params: vaultEnvelope.key_derivation_params,
+        encryption_nonce: vaultEnvelope.encryption_nonce,
       });
 
       router.push('/dashboard');
@@ -123,6 +163,25 @@ export default function RegisterPage() {
     {
       label: 'One number',
       valid: /[0-9]/.test(formData.password),
+    },
+  ];
+
+  const vaultPasswordRequirements = [
+    {
+      label: '12 characters minimum',
+      valid: formData.vaultPassword.length >= 12,
+    },
+    {
+      label: 'One uppercase letter',
+      valid: /[A-Z]/.test(formData.vaultPassword),
+    },
+    {
+      label: 'One lowercase letter',
+      valid: /[a-z]/.test(formData.vaultPassword),
+    },
+    {
+      label: 'One number',
+      valid: /[0-9]/.test(formData.vaultPassword),
     },
   ];
 
@@ -285,6 +344,87 @@ export default function RegisterPage() {
                     setFormData({
                       ...formData,
                       confirmPassword: e.target.value,
+                    })
+                  }
+                  disabled={isLoading}
+                  className="h-11 border-white/[0.1] bg-white/[0.03] text-white placeholder:text-slate-600 transition-colors focus:border-slate-400 focus:bg-white/[0.05] focus:ring-0"
+                />
+              </div>
+
+              {/* Vault password */}
+              <div className="space-y-2">
+                <Label
+                  htmlFor="vaultPassword"
+                  className="text-sm font-medium text-slate-200"
+                >
+                  Vault password
+                </Label>
+
+                <Input
+                  id="vaultPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Create a vault password for encryption"
+                  value={formData.vaultPassword}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      vaultPassword: e.target.value,
+                    })
+                  }
+                  disabled={isLoading}
+                  className="h-11 border-white/[0.1] bg-white/[0.03] text-white placeholder:text-slate-600 transition-colors focus:border-slate-400 focus:bg-white/[0.05] focus:ring-0"
+                />
+
+                {/* Vault password requirements */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-2">
+                  {vaultPasswordRequirements.map((requirement) => (
+                    <div
+                      key={requirement.label}
+                      className="flex items-center gap-2 text-xs"
+                    >
+                      <span
+                        className={`flex h-4 w-4 items-center justify-center rounded-full border text-[9px] ${requirement.valid
+                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+                          : 'border-white/10 text-slate-600'
+                          }`}
+                      >
+                        {requirement.valid ? '✓' : ''}
+                      </span>
+
+                      <span
+                        className={
+                          requirement.valid
+                            ? 'text-slate-300'
+                            : 'text-slate-500'
+                        }
+                      >
+                        {requirement.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Confirm vault password */}
+              <div className="space-y-2">
+                <Label
+                  htmlFor="confirmVaultPassword"
+                  className="text-sm font-medium text-slate-200"
+                >
+                  Confirm vault password
+                </Label>
+
+                <Input
+                  id="confirmVaultPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Re-enter your vault password"
+                  value={formData.confirmVaultPassword}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      confirmVaultPassword: e.target.value,
                     })
                   }
                   disabled={isLoading}

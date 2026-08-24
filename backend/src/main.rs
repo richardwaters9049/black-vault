@@ -1,5 +1,6 @@
 mod api;
 mod config;
+mod crypto;
 mod database;
 mod middleware;
 mod models;
@@ -25,6 +26,7 @@ use api::auth::{
     register,
 };
 use api::user::me;
+use api::vault::{setup_vault, get_vault_key};
 
 use config::Config;
 use middleware::auth::authenticate;
@@ -60,6 +62,8 @@ async fn main() {
 
     let protected_routes = Router::new()
         .route("/user/me", get(me))
+        .route("/vault/setup", post(setup_vault))
+        .route("/vault/key", get(get_vault_key))
         .route_layer(axum::middleware::from_fn_with_state(
             config.clone(),
             authenticate,

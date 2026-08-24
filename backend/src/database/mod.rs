@@ -1,4 +1,5 @@
 pub mod users;
+pub mod vault_keys;
 
 use sqlx::{
     postgres::PgPoolOptions,

@@ -22,7 +22,7 @@ pub struct UserResponse {
     pub email: String,
 }
 
-pub struct AuthenticatedUser(Uuid);
+pub struct AuthenticatedUser(pub Uuid);
 
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where

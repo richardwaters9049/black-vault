@@ -1,8 +1,5 @@
 use axum::{
-    extract::{
-        FromRequestParts,
-        State,
-    },
+    extract::{FromRequestParts, State},
     http::StatusCode,
     Json,
 };
@@ -39,12 +36,7 @@ where
             .get::<Uuid>()
             .cloned()
             .map(AuthenticatedUser)
-            .ok_or_else(|| {
-                (
-                    StatusCode::UNAUTHORIZED,
-                    "Unauthorized".to_string(),
-                )
-            })
+            .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))
     }
 }
 
@@ -54,12 +46,15 @@ pub async fn me(
 ) -> Result<Json<UserResponse>, ErrorResponse> {
     let user_record = find_user_by_id(&pool, user_id)
         .await
-        .map_err(|_| ErrorResponse {
-            error: "Failed to fetch user".to_string(),
+        .map_err(|error| {
+            tracing::error!(
+                error = ?error,
+                "Failed to fetch authenticated user"
+            );
+
+            ErrorResponse::internal_server_error("Failed to fetch user")
         })?
-        .ok_or_else(|| ErrorResponse {
-            error: "User not found".to_string(),
-        })?;
+        .ok_or_else(|| ErrorResponse::not_found("User not found"))?;
 
     let user_response = UserResponse {
         id: user_record.id,

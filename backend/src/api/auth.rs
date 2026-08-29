@@ -1,13 +1,6 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use serde::{Deserialize, Serialize};
 
 use sqlx::PgPool;
 
@@ -16,10 +9,7 @@ use uuid::Uuid;
 use crate::api::error::ErrorResponse;
 use crate::config::Config;
 
-use crate::services::auth::{
-    login_user,
-    register_user,
-};
+use crate::services::auth::{login_user, register_user};
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterRequest {
@@ -36,27 +26,17 @@ pub struct RegisterResponse {
 pub async fn register(
     State((pool, _config)): State<(PgPool, Config)>,
     Json(payload): Json<RegisterRequest>,
-) -> Result<
-    (StatusCode, Json<RegisterResponse>),
-    ErrorResponse,
-> {
-    let user =
-        register_user(
-            &pool,
-            &payload.email,
-            &payload.password,
-        )
+) -> Result<(StatusCode, Json<RegisterResponse>), ErrorResponse> {
+    let user = register_user(&pool, &payload.email, &payload.password)
         .await
-        .map_err(|error| ErrorResponse { error })?;
+        .map_err(ErrorResponse::from_service_error)?;
 
     Ok((
         StatusCode::CREATED,
-        Json(
-            RegisterResponse {
-                id: user.id,
-                email: user.email,
-            }
-        ),
+        Json(RegisterResponse {
+            id: user.id,
+            email: user.email,
+        }),
     ))
 }
 
@@ -76,31 +56,17 @@ pub struct LoginResponse {
 pub async fn login(
     State((pool, config)): State<(PgPool, Config)>,
     Json(payload): Json<LoginRequest>,
-) -> Result<
-    (StatusCode, Json<LoginResponse>),
-    ErrorResponse,
-> {
-    let (
-        user,
-        token,
-    ) =
-        login_user(
-            &pool,
-            &config,
-            &payload.email,
-            &payload.password,
-        )
+) -> Result<(StatusCode, Json<LoginResponse>), ErrorResponse> {
+    let (user, token) = login_user(&pool, &config, &payload.email, &payload.password)
         .await
-        .map_err(|error| ErrorResponse { error })?;
+        .map_err(ErrorResponse::from_service_error)?;
 
     Ok((
         StatusCode::OK,
-        Json(
-            LoginResponse {
-                id: user.id,
-                email: user.email,
-                token,
-            }
-        ),
+        Json(LoginResponse {
+            id: user.id,
+            email: user.email,
+            token,
+        }),
     ))
 }

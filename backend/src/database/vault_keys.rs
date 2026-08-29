@@ -80,36 +80,28 @@ mod tests {
     use super::*;
     use crate::database::users::create_user;
 
- async fn test_pool() -> PgPool {
-    dotenvy::dotenv().ok();
+    async fn test_pool() -> PgPool {
+        dotenvy::dotenv().ok();
 
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set for vault key tests");
+        let database_url =
+            std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for vault key tests");
 
-    PgPool::connect(&database_url)
-        .await
-        .expect("Failed to connect to test database")
-}
+        PgPool::connect(&database_url)
+            .await
+            .expect("Failed to connect to test database")
+    }
 
     #[tokio::test]
     async fn create_and_retrieve_vault_key() {
         let pool = test_pool().await;
 
-        let email = format!(
-            "vault-key-test-{}@blackvault.local",
-            Uuid::new_v4()
-        );
+        let email = format!("vault-key-test-{}@blackvault.local", Uuid::new_v4());
 
-        let password_hash =
-            "$argon2id$v=19$m=19456,t=2,p=1$test$test";
+        let password_hash = "$argon2id$v=19$m=19456,t=2,p=1$test$test";
 
-        let user = create_user(
-            &pool,
-            &email,
-            password_hash,
-        )
-        .await
-        .expect("Failed to create test user");
+        let user = create_user(&pool, &email, password_hash)
+            .await
+            .expect("Failed to create test user");
 
         let user_id = user.id;
 
@@ -129,10 +121,7 @@ mod tests {
         .expect("Failed to create vault key");
 
         assert_eq!(vault_key.user_id, user_id);
-        assert_eq!(
-            vault_key.encrypted_vault_key,
-            "test_encrypted_key"
-        );
+        assert_eq!(vault_key.encrypted_vault_key, "test_encrypted_key");
 
         let retrieved = get_vault_key(&pool, user_id)
             .await
@@ -140,26 +129,17 @@ mod tests {
             .expect("Vault key not found");
 
         assert_eq!(retrieved.user_id, user_id);
-        assert_eq!(
-            retrieved.encrypted_vault_key,
-            "test_encrypted_key"
-        );
+        assert_eq!(retrieved.encrypted_vault_key, "test_encrypted_key");
 
-        sqlx::query!(
-            "DELETE FROM vault_keys WHERE user_id = $1",
-            user_id
-        )
-        .execute(&pool)
-        .await
-        .expect("Failed to clean up test vault key");
+        sqlx::query!("DELETE FROM vault_keys WHERE user_id = $1", user_id)
+            .execute(&pool)
+            .await
+            .expect("Failed to clean up test vault key");
 
-        sqlx::query!(
-            "DELETE FROM users WHERE id = $1",
-            user_id
-        )
-        .execute(&pool)
-        .await
-        .expect("Failed to clean up test user");
+        sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+            .execute(&pool)
+            .await
+            .expect("Failed to clean up test user");
     }
 
     #[tokio::test]

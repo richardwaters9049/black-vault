@@ -1,5 +1,5 @@
-use rand::RngCore;
 use crate::crypto::error::CryptoError;
+use rand::RngCore;
 
 const VAULT_KEY_SIZE: usize = 32; // 256 bits
 const FILE_KEY_SIZE: usize = 32; // 256 bits

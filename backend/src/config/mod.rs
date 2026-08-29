@@ -11,23 +11,22 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Result<Self, String> {
-        let database_url = env::var("DATABASE_URL")
-            .map_err(|_| "DATABASE_URL is not configured".to_string())?;
+        let database_url =
+            env::var("DATABASE_URL").map_err(|_| "DATABASE_URL is not configured".to_string())?;
 
         if database_url.trim().is_empty() {
             return Err("DATABASE_URL cannot be empty".to_string());
         }
 
-        let host = env::var("HOST")
-            .unwrap_or_else(|_| "0.0.0.0".to_string());
+        let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
 
         let port = env::var("PORT")
             .unwrap_or_else(|_| "8080".to_string())
             .parse::<u16>()
             .map_err(|_| "PORT must be a valid number".to_string())?;
 
-        let jwt_secret = env::var("JWT_SECRET")
-            .map_err(|_| "JWT_SECRET is not configured".to_string())?;
+        let jwt_secret =
+            env::var("JWT_SECRET").map_err(|_| "JWT_SECRET is not configured".to_string())?;
 
         if jwt_secret.trim().is_empty() {
             return Err("JWT_SECRET cannot be empty".to_string());
@@ -36,14 +35,10 @@ impl Config {
         let jwt_expiration = env::var("JWT_EXPIRATION")
             .unwrap_or_else(|_| "3600".to_string())
             .parse::<u64>()
-            .map_err(|_| {
-                "JWT_EXPIRATION must be a valid number".to_string()
-            })?;
+            .map_err(|_| "JWT_EXPIRATION must be a valid number".to_string())?;
 
         if jwt_expiration == 0 {
-            return Err(
-                "JWT_EXPIRATION must be greater than zero".to_string()
-            );
+            return Err("JWT_EXPIRATION must be greater than zero".to_string());
         }
 
         Ok(Self {

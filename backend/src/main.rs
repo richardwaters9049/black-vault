@@ -1,35 +1,18 @@
-mod api;
-mod config;
-mod crypto;
-mod database;
-mod middleware;
-mod models;
-mod services;
-
 use axum::{
-    routing::{
-        get,
-        post,
-    },
+    routing::{get, post},
     Router,
 };
 
 use dotenvy::dotenv;
 
-use tower_http::cors::{
-    Any,
-    CorsLayer,
-};
+use tower_http::cors::{Any, CorsLayer};
 
-use api::auth::{
-    login,
-    register,
-};
-use api::user::me;
-use api::vault::{setup_vault, get_vault_key};
-
-use config::Config;
-use middleware::auth::authenticate;
+use black_vault_api::api::auth::{login, register};
+use black_vault_api::api::user::me;
+use black_vault_api::api::vault::{get_vault_key, setup_vault};
+use black_vault_api::config::Config;
+use black_vault_api::database;
+use black_vault_api::middleware::auth::authenticate;
 
 #[tokio::main]
 async fn main() {
@@ -37,18 +20,13 @@ async fn main() {
 
     tracing_subscriber::fmt::init();
 
-    let config = Config::from_env()
-        .expect("Failed to load application configuration");
+    let config = Config::from_env().expect("Failed to load application configuration");
 
-    let pool = database::connect(
-        &config.database_url,
-    )
-    .await
-    .expect("Failed to connect to database");
+    let pool = database::connect(&config.database_url)
+        .await
+        .expect("Failed to connect to database");
 
-    tracing::info!(
-        "Database connected"
-    );
+    tracing::info!("Database connected");
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -72,21 +50,13 @@ async fn main() {
     let app: Router = public_routes
         .merge(protected_routes)
         .layer(cors)
-        .with_state((
-            pool,
-            config.clone(),
-        ));
+        .with_state((pool, config.clone()));
 
-    let address = format!(
-        "{}:{}",
-        config.host,
-        config.port
-    );
+    let address = format!("{}:{}", config.host, config.port);
 
-    let listener =
-        tokio::net::TcpListener::bind(&address)
-            .await
-            .expect("Failed to bind server");
+    let listener = tokio::net::TcpListener::bind(&address)
+        .await
+        .expect("Failed to bind server");
 
     tracing::info!(
         "Black Vault API running on http://{}:{}",
@@ -94,12 +64,7 @@ async fn main() {
         config.port
     );
 
-    axum::serve(
-        listener,
-        app,
-    )
-    .await
-    .expect("Server error");
+    axum::serve(listener, app).await.expect("Server error");
 }
 
 async fn health_check() -> &'static str {

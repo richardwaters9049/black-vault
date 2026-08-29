@@ -10,7 +10,7 @@ import {
   GetVaultKeyResponse,
 } from "./types";
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public message: string,
     public status?: number,
@@ -21,10 +21,29 @@ class ApiError extends Error {
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type");
+  const isJson = contentType?.includes("application/json") ?? false;
+
   if (!response.ok) {
-    const errorData: ApiErrorType = await response.json();
-    throw new ApiError(errorData.error, response.status);
+    if (isJson) {
+      const errorData = (await response.json()) as Partial<ApiErrorType>;
+      throw new ApiError(
+        errorData.error ?? "Request failed",
+        response.status,
+      );
+    }
+
+    throw new ApiError("Request failed", response.status);
   }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  if (!isJson) {
+    return response.text() as Promise<T>;
+  }
+
   return response.json();
 }
 

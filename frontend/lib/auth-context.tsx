@@ -15,7 +15,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Initialize state from localStorage directly
   const getInitialAuthState = () => {
     if (typeof window === 'undefined') {
       return { user: null, token: null, isLoading: true };
@@ -31,8 +30,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           token: storedToken,
           isLoading: false,
         };
-      } catch (error) {
-        console.error('Failed to parse stored user data:', error);
+      } catch {
+        console.warn('Stored authentication state was invalid and has been cleared');
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_user');
         return { user: null, token: null, isLoading: false };

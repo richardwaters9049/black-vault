@@ -1,181 +1,150 @@
 # Black Vault - Project Summary for AI Developers
 
+**Last updated:** Saturday 29 August 2026, 22:23 BST
+
 ## Project Overview
 
-**Black Vault** is a security-focused file encryption and transfer platform built with a Rust backend and Next.js frontend. The platform is designed to handle sensitive files with privacy and security as first-class requirements, following a zero-trust architecture where files are encrypted before permanent storage.
+**Black Vault** is a security-focused digital vault and encrypted file platform built with a Rust backend, a Next.js frontend, and PostgreSQL. The application is designed around client-side encryption: sensitive plaintext and user-controlled encryption keys should remain in the browser wherever practical, while the backend handles authentication, authorisation, encrypted metadata, opaque encrypted payloads, and persistence.
 
-### Current Status
-- **Authentication backend**: Complete and tested
-- **Frontend development**: Underway (login, register, dashboard pages implemented)
-- **File encryption workflows**: Next major development stage
-- **Containerisation**: Docker setup ready
+The project should be treated as a security application, not a generic CRUD product.
 
----
+The core principle is:
 
-## Project Tree
+> Sensitive plaintext should remain on the client wherever practical.
 
-```
+## Current Status
+
+- **Authentication backend:** Implemented and tested.
+- **JWT-protected routes:** Implemented for user and vault APIs.
+- **Vault key storage:** Implemented through the `vault_keys` table and protected API routes.
+- **Frontend auth UI:** Login, registration, and dashboard pages exist.
+- **Frontend crypto:** Vault key generation, Argon2id derivation, AES-GCM encryption/decryption, and tests exist.
+- **Backend crypto module:** Implemented and tested, but not yet central to runtime file workflows.
+- **Error handling:** Recently improved with structured API response status handling.
+- **Vault metadata validation:** Server now validates vault setup metadata before persistence.
+- **File workflows:** Not yet implemented; this is the next major product stage.
+- **Audit logging:** Not yet implemented, but required for sensitive actions.
+- **Project docs:** `PROJECT_HANDOVER.md` is detailed and useful; this summary is now refreshed to match current code.
+
+## Current Repository Shape
+
+```text
 black-vault/
-├── AGENTS.md                          # Engineering rules for AI agents
-├── README.md                          # Main project documentation
-├── docker-compose.yml                 # Docker orchestration
-├── .env.docker                        # Docker environment variables
-├── .gitignore
-│
-├── backend/                           # Rust API Server
-│   ├── Cargo.toml                     # Rust dependencies
+├── AGENTS.md
+├── PROJECT_HANDOVER.md
+├── PROJECT_SUMMARY.md
+├── README.md
+├── docker-compose.yml
+├── backend/
+│   ├── Cargo.toml
 │   ├── Cargo.lock
-│   ├── Dockerfile                     # Production Docker image
-│   ├── README.md
-│   ├── src/
-│   │   ├── main.rs                    # Application entry point
-│   │   ├── api/                       # API route handlers
-│   │   │   ├── mod.rs
-│   │   │   ├── auth.rs                # Register/login endpoints
-│   │   │   ├── user.rs                # User endpoints
-│   │   │   └── error.rs               # Error handling
-│   │   ├── config/
-│   │   │   └── mod.rs                 # Configuration management
-│   │   ├── database/
-│   │   │   ├── mod.rs                 # Database connection
-│   │   │   └── users.rs               # User queries
-│   │   ├── middleware/
-│   │   │   ├── mod.rs
-│   │   │   └── auth.rs                # JWT authentication middleware
-│   │   ├── models/
-│   │   │   ├── mod.rs
-│   │   │   └── user.rs                # User data models
-│   │   ├── services/
-│   │   │   ├── mod.rs
-│   │   │   ├── auth.rs                # Authentication logic
-│   │   │   └── jwt.rs                 # JWT token generation
-│   │   └── crypto/                    # (Empty - encryption module to be implemented)
+│   ├── Dockerfile
 │   ├── migrations/
-│   │   └── 001_create_users.sql       # Database schema
-│   ├── tests/                         # Backend tests
-│   └── docs/                          # Backend documentation
-│
-├── frontend/                          # Next.js Frontend
-│   ├── package.json                   # Node dependencies
-│   ├── package-lock.json
-│   ├── tsconfig.json                  # TypeScript configuration
-│   ├── next.config.ts                 # Next.js configuration
-│   ├── components.json                # shadcn/ui configuration
-│   ├── Dockerfile                     # Production Docker image
-│   ├── Dockerfile.dev                 # Development Docker image
-│   ├── AGENTS.md                      # Next.js version warning
-│   ├── CLAUDE.md                      # Claude-specific notes
-│   ├── README.md
+│   │   ├── 001_create_users.sql
+│   │   └── 002_create_vault_keys.sql
+│   └── src/
+│       ├── lib.rs
+│       ├── main.rs
+│       ├── api/
+│       │   ├── auth.rs
+│       │   ├── error.rs
+│       │   ├── mod.rs
+│       │   ├── user.rs
+│       │   └── vault.rs
+│       ├── config/
+│       ├── crypto/
+│       │   ├── derivation.rs
+│       │   ├── encryption.rs
+│       │   ├── error.rs
+│       │   ├── keys.rs
+│       │   └── mod.rs
+│       ├── database/
+│       │   ├── mod.rs
+│       │   ├── users.rs
+│       │   └── vault_keys.rs
+│       ├── middleware/
+│       ├── models/
+│       └── services/
+├── frontend/
 │   ├── app/
-│   │   ├── layout.tsx                 # Root layout
-│   │   ├── page.tsx                   # Landing page
-│   │   ├── globals.css                # Global styles
+│   │   ├── dashboard/
 │   │   ├── login/
-│   │   │   └── page.tsx               # Login page
 │   │   ├── register/
-│   │   │   └── page.tsx               # Registration page
-│   │   └── dashboard/
-│   │       └── page.tsx               # Dashboard page
+│   │   ├── layout.tsx
+│   │   ├── page.tsx
+│   │   └── globals.css
 │   ├── components/
-│   │   └── ui/                        # shadcn/ui components
-│   │       ├── button.tsx
-│   │       ├── card.tsx
-│   │       ├── input.tsx
-│   │       └── label.tsx
-│   ├── lib/                           # Utility functions
-│   └── public/                        # Static assets
-│
-├── database/                          # (Empty - database data)
-├── storage/                           # (Empty - encrypted file storage)
+│   ├── lib/
+│   │   ├── api.ts
+│   │   ├── auth-context.tsx
+│   │   ├── crypto.test.ts
+│   │   ├── crypto.ts
+│   │   ├── types.ts
+│   │   └── utils.ts
+│   ├── bun.lock
+│   └── package.json
 ├── docs/
-│   └── Architecture.md                # Architecture documentation
+│   ├── Architecture.md
+│   └── Encryption_Architecture.md
+├── database/
 ├── scripts/
-│   └── docker-dev.sh                  # Docker development script
-└── tests/                             # (Empty - integration tests)
+├── storage/
+└── tests/
 ```
 
----
+Always inspect the live repository before acting; this project is moving quickly.
 
 ## Technology Stack
 
-### Backend (Rust)
-- **Framework**: Axum 0.8 (async web framework)
-- **Runtime**: Tokio 1 (async runtime)
-- **Database**: PostgreSQL via SQLx 0.8
-- **Authentication**: 
-  - JWT (jsonwebtoken 11.0.0)
-  - Argon2 (password hashing)
-- **Serialization**: Serde + Serde JSON
-- **HTTP**: Tower-HTTP (CORS, tracing)
-- **Utilities**: UUID, Chrono, Regex, Tracing
+### Backend
 
-### Frontend (Next.js)
-- **Framework**: Next.js 16.3.1 (React 19.2.8)
-- **Language**: TypeScript 5
-- **Styling**: TailwindCSS 4
-- **UI Components**: shadcn/ui + Base UI
-- **Forms**: React Hook Form + Zod validation
-- **Icons**: Lucide React
+- Rust 2021
+- Axum 0.8
+- Tokio 1
+- SQLx 0.8
+- PostgreSQL
+- Argon2 for authentication password hashing
+- JSON Web Tokens via `jsonwebtoken`
+- AES-GCM, Argon2, Base64, UUID, Chrono, Regex, Tracing
+
+### Frontend
+
+- Next.js 16.3.1
+- React 19.2.8
+- TypeScript 5
+- Bun package/runtime workflow
+- Tailwind CSS 4
+- shadcn/ui and Base UI
+- Noble crypto packages:
+  - `@noble/ciphers`
+  - `@noble/hashes`
 
 ### Infrastructure
-- **Containerisation**: Docker + Docker Compose
-- **Database**: PostgreSQL 17 (Alpine)
-- **Network**: Bridge network for service communication
 
----
-
-## Architecture
-
-```
-┌─────────────────────────────┐
-│        Next.js Frontend     │
-│                             │
-│  - Authentication UI         │
-│  - File management UI       │
-│  - Upload / download        │
-│  - Security status          │
-└──────────────┬──────────────┘
-               │
-               │ HTTPS / API
-               ▼
-┌─────────────────────────────┐
-│        Rust API (Axum)       │
-│                             │
-│  - Authentication            │
-│  - Authorisation             │
-│  - File operations           │
-│  - Validation                │
-│  - Security controls         │
-└──────────────┬──────────────┘
-               │
-       ┌───────┴────────┐
-       ▼                ▼
-┌──────────────┐  ┌──────────────┐
-│ PostgreSQL   │  │ File/Object  │
-│              │  │ Storage      │
-│ - Users      │  │ Encrypted    │
-│ - Metadata   │  │ Files        │
-│ - Permissions│  │              │
-└──────────────┘  └──────────────┘
-```
-
----
+- Docker and Docker Compose
+- PostgreSQL 17 Alpine
+- Local development database currently documented as `black_vault_db`
 
 ## Current API Endpoints
 
-### Public Routes
-- `GET /health` - Health check
-- `POST /auth/register` - User registration
-- `POST /auth/login` - User login
+### Public
 
-### Protected Routes (Requires JWT)
-- `GET /user/me` - Get current user info
+- `GET /health` - Health check.
+- `POST /auth/register` - Create a user account.
+- `POST /auth/login` - Authenticate and return a JWT.
 
----
+### Protected
+
+- `GET /user/me` - Return authenticated user details.
+- `POST /vault/setup` - Store the authenticated user's encrypted vault key metadata.
+- `GET /vault/key` - Retrieve the authenticated user's encrypted vault key metadata.
+
+Protected routes use JWT middleware. User identity must be derived from the validated token, not from frontend-supplied `user_id` values.
 
 ## Database Schema
 
-### Users Table
+### `users`
+
 ```sql
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -185,140 +154,228 @@ CREATE TABLE users (
 );
 ```
 
----
+### `vault_keys`
 
-## Engineering Rules (CRITICAL)
+```sql
+CREATE TABLE vault_keys (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    encrypted_vault_key TEXT NOT NULL,
+    key_derivation_salt TEXT NOT NULL,
+    key_derivation_params JSONB NOT NULL,
+    encryption_nonce TEXT NOT NULL,
+    encryption_version TEXT NOT NULL DEFAULT '1',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
 
-### Security Rules
-- **Never store plaintext files**
-- **Never log secrets**
-- **Never expose encryption keys**
-- **Validate all user input**
-
-### Rust Development
-- **Prefer safe Rust**
-- **Avoid unsafe blocks unless justified**
-- **Use Result-based error handling**
-
-### API Development
-- **All endpoints require authentication**
-- **All actions require authorisation checks**
-- **Every sensitive action must create an audit event**
-
-### Testing Requirements
-Every feature requires:
-- Unit tests
-- Integration tests
-- Security review
-
----
-
-## Core Principles
-
-1. **Security First** - Every feature considered from security perspective before implementation
-2. **Least Privilege** - Users, services, and database operations have only required access
-3. **Defence in Depth** - Multiple security layers (auth, authorisation, validation, encryption, logging)
-4. **Minimise Plaintext Exposure** - Sensitive data exists only where required and for minimal time
-5. **Fail Securely** - Unexpected failures should not grant access to protected resources
-6. **No Security by Obscurity** - Security from sound design, not hiding implementation
-7. **Clear Separation** - Frontend, API, auth, business logic, database, crypto have defined responsibilities
-
----
-
-## Development Setup
-
-### Prerequisites
-- Docker and Docker Compose
-- Rust (for local backend development)
-- Node.js 20+ (for local frontend development)
-
-### Running with Docker
-```bash
-# Set required environment variables
-export JWT_SECRET="your-secret-key"
-export JWT_EXPIRATION="3600"
-
-# Start all services
-docker-compose up --build
-
-# Services will be available at:
-# - Frontend: http://localhost:3000
-# - Backend API: http://localhost:8080
-# - PostgreSQL: localhost:5432
+CREATE INDEX idx_vault_keys_user_id ON vault_keys(user_id);
 ```
 
-### Local Development
+The `vault_keys.user_id` foreign key means vault key records require an existing user. Tests must insert a user before creating a vault key.
+
+## Security Model
+
+Black Vault separates authentication from vault encryption:
+
+- The **login password** is used for authentication and is hashed server-side with Argon2.
+- The **vault password** is used client-side to derive an encryption key.
+- The **vault key** is generated client-side.
+- The **encrypted vault key** is stored server-side.
+- The backend should not receive the plaintext vault password or plaintext vault key.
+
+Current vault key envelope fields:
+
+```text
+encrypted_vault_key
+key_derivation_salt
+key_derivation_params
+encryption_nonce
+encryption_version
+```
+
+Current frontend crypto constants:
+
+```text
+Vault key: 32 bytes
+File key: 32 bytes
+AES-GCM nonce: 12 bytes
+Argon2id output: 32 bytes
+```
+
+Current Argon2id parameters:
+
+```text
+t_cost = 2
+m_cost = 19456
+p_cost = 1
+output_len = 32
+```
+
+## Error Handling State
+
+The API now uses `ErrorResponse` constructors for explicit status handling:
+
+- `bad_request`
+- `conflict`
+- `not_found`
+- `internal_server_error`
+- `from_service_error`
+
+The JSON response shape remains:
+
+```json
+{
+  "error": "Message"
+}
+```
+
+Important direction:
+
+- Avoid exposing database or cryptographic internals to clients.
+- Log detailed server-side failures with `tracing`.
+- Return stable, minimal client-facing messages.
+- Move auth service errors from `String` to a typed enum in a future hardening pass.
+
+## Recently Validated
+
+The most recent known validation pass completed successfully:
+
 ```bash
-# Backend
 cd backend
-cargo run
+cargo test
+cargo clippy --all-targets -- -D warnings
 
-# Frontend
-cd frontend
-npm install
-npm run dev
+cd ../frontend
+bun test
+bunx tsc --noEmit
+bun run lint
 ```
 
----
+Observed results:
 
-## Important Notes for AI Developers
+- Backend tests: `37 passed`
+- Strict backend Clippy: passed
+- Frontend crypto tests: `5 passed`
+- TypeScript check: passed
+- Frontend lint: passed
 
-### Next.js Version Warning
-The frontend uses Next.js 16.3.1 with breaking changes from previous versions. **Always check** `node_modules/next/dist/docs/` before writing frontend code, as APIs and conventions may differ from training data.
+## Engineering Rules
 
-### Security Mindset
-This is a security-focused application. Every code change must consider:
-- Input validation
-- Authentication/authorisation
-- Data exposure
-- Error handling
-- Logging (never log secrets)
-- Encryption key management
+From `AGENTS.md`:
 
-### Current Implementation Status
-- ✅ User registration with Argon2 password hashing
-- ✅ User login with JWT authentication
-- ✅ Protected routes with middleware
-- ✅ Frontend auth UI (login, register, dashboard)
-- ⏳ File encryption (crypto module empty - to be implemented)
-- ⏳ File upload/download workflows
-- ⏳ File sharing/transfer functionality
-- ⏳ Audit logging
-- ⏳ Integration tests
+- Never store plaintext files.
+- Never log secrets.
+- Never expose encryption keys.
+- Validate all user input.
+- Prefer safe Rust.
+- Use `Result`-based error handling.
+- All endpoints require authentication except deliberate public routes.
+- All actions require authorisation checks.
+- Every sensitive action must create an audit event.
+- Every feature requires unit tests, integration tests, and security review.
 
-### File Structure Conventions
-- Backend follows standard Rust module structure
-- Frontend uses Next.js App Router
-- Database migrations in `backend/migrations/`
-- UI components in `frontend/components/ui/` (shadcn/ui)
+## Known Gaps
 
-### Environment Variables
-Required for Docker:
-- `JWT_SECRET` - Secret key for JWT signing
-- `JWT_EXPIRATION` - Token expiration time (seconds, default: 3600)
+- `PROJECT_HANDOVER.md` and this summary should remain aligned after future milestones.
+- Auth service errors are still string-based internally.
+- Vault API has validation tests, but needs full API integration tests.
+- No audit event table or audit logging exists yet.
+- No file metadata/file storage schema exists yet.
+- No encrypted upload/download workflow exists yet.
+- Dashboard unlock currently verifies the vault password but does not yet manage a complete key lifecycle for file operations.
+- JWTs are stored in `localStorage`, which is acceptable for early development but should be revisited during security hardening.
+- CORS is permissive in development and needs environment-aware production configuration.
+- Timestamps should eventually use a deliberate timezone strategy.
 
----
+## Immediate Next Steps
 
-## Planned Features (Roadmap)
+1. **Add backend API integration tests**
+   - Registration.
+   - Login.
+   - `GET /user/me`.
+   - Unauthenticated protected-route rejection.
+   - Vault setup.
+   - Vault key retrieval.
+   - Duplicate vault setup rejection.
+   - Invalid vault metadata rejection.
 
-1. **File Encryption Module** - Implement crypto operations in `backend/src/crypto/`
-2. **File Upload/Download** - Secure file transfer endpoints
-3. **File Storage** - Encrypted file object storage
-4. **Access Control** - File permissions and sharing
-5. **Audit Logging** - Security event tracking
-6. **Redis Cache** - Session management and caching
-7. **Comprehensive Testing** - Unit and integration tests
-8. **Security Review** - Professional security audit
+2. **Introduce typed auth/service errors**
+   - Replace `Result<T, String>` in auth/JWT service layers.
+   - Map typed errors to API responses at the edge.
+   - Keep client-facing messages stable and non-leaky.
 
----
+3. **Design audit logging**
+   - Add `audit_events` migration.
+   - Record authentication and vault setup/retrieval events.
+   - Ensure no secrets, plaintext, or encrypted key material is logged.
 
-## Contact & Context
+4. **Design encrypted file metadata**
+   - Add schema for encrypted files and wrapped file keys.
+   - Define ownership checks.
+   - Document encryption versioning and metadata format before implementation.
 
-This project follows strict security engineering practices. When working on this codebase:
-- Always reference `AGENTS.md` for engineering rules
-- Consider security implications of every change
-- Follow the principle of least privilege
-- Ensure proper error handling without exposing sensitive information
-- Write tests for all new features
+5. **Build file upload/download flow**
+   - Encrypt files client-side.
+   - Store encrypted payloads only.
+   - Store metadata and wrapped file keys server-side.
+   - Test tampering, ownership, and invalid metadata cases.
 
-The goal is to create a professional security tool, not a generic SaaS application.
+6. **Refresh frontend vault lifecycle**
+   - Explicit unlock state.
+   - Lock operation clears sensitive key material.
+   - Avoid persistent storage of decrypted keys.
+   - Prepare dashboard for encrypted file actions.
+
+## Development Commands
+
+Backend:
+
+```bash
+cd backend
+cargo fmt
+cargo test
+cargo clippy --all-targets -- -D warnings
+```
+
+Frontend:
+
+```bash
+cd frontend
+bun install
+bun test
+bunx tsc --noEmit
+bun run lint
+```
+
+Full local stack:
+
+```bash
+docker-compose up --build
+```
+
+## Commit Style
+
+Preferred format:
+
+```text
+Backend/API: Improve vault error handling
+Backend/Security: Add vault metadata validation
+Frontend/API: Harden client error parsing
+Docs/Summary: Refresh project status
+FullStack/Security: Connect vault validation flow
+Tests/API: Add vault integration coverage
+```
+
+Keep commits small and logically grouped.
+
+## Working Notes For Future Agents
+
+- Use UK English.
+- Use Bun for frontend work.
+- Do not reintroduce `@noble/argon2` without checking package availability and compatibility.
+- Check installed Noble package exports before changing crypto imports.
+- Do not weaken cryptography to satisfy tests.
+- Do not remove tests because they are inconvenient.
+- Do not commit secrets or `.env`.
+- Treat the backend as the security boundary, even when the frontend validates too.
+- Prefer surgical changes that preserve the existing architecture.

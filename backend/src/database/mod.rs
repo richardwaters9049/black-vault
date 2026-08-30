@@ -1,3 +1,4 @@
+pub mod files;
 pub mod users;
 pub mod vault_keys;
 

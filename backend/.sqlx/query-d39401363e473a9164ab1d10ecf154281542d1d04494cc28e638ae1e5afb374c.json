@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE files\n        SET encrypted_data = $1,\n            updated_at = NOW()\n        WHERE id = $2\n          AND user_id = $3\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d39401363e473a9164ab1d10ecf154281542d1d04494cc28e638ae1e5afb374c"
+}

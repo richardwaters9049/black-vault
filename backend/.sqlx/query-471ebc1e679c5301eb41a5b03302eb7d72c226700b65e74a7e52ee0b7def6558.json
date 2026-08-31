@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO vault_keys (\n            user_id,\n            encrypted_vault_key,\n            key_derivation_salt,\n            key_derivation_params,\n            encryption_nonce\n        )\n        VALUES ($1, $2, $3, $4, $5)\n        RETURNING\n            user_id,\n            encrypted_vault_key,\n            key_derivation_salt,\n            key_derivation_params,\n            encryption_nonce,\n            encryption_version\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "encrypted_vault_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "key_derivation_salt",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "key_derivation_params",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "encryption_nonce",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "encryption_version",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "471ebc1e679c5301eb41a5b03302eb7d72c226700b65e74a7e52ee0b7def6558"
+}

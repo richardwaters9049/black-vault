@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            id,\n            user_id,\n            encrypted_filename,\n            encrypted_file_key,\n            encryption_nonce,\n            encryption_version,\n            file_size,\n            created_at,\n            updated_at\n        FROM files\n        WHERE user_id = $1\n        ORDER BY created_at DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "encrypted_filename",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "encrypted_file_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "encryption_nonce",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "encryption_version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "file_size",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a20d0837ed81d32848c66b93989f79980a19b77460328068f5decba9e6b380ca"
+}

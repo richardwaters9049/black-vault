@@ -1,11 +1,13 @@
 use axum::{
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::api::auth::{login, register};
-use crate::api::files::{create, delete as delete_file, get as get_file, list};
+use crate::api::files::{
+    create, delete as delete_file, download_data, get as get_file, list, upload_data,
+};
 use crate::api::user::me;
 use crate::api::vault::{get_vault_key, setup_vault};
 use crate::config::Config;
@@ -28,6 +30,7 @@ pub fn create_app(pool: sqlx::PgPool, config: Config) -> Router {
         .route("/vault/key", get(get_vault_key))
         .route("/files", post(create).get(list))
         .route("/files/{file_id}", get(get_file).delete(delete_file))
+        .route("/files/{file_id}/data", put(upload_data).get(download_data))
         .route_layer(axum::middleware::from_fn_with_state(
             config.clone(),
             authenticate,

@@ -113,6 +113,51 @@ pub async fn list_files(pool: &PgPool, user_id: Uuid) -> Result<Vec<FileRecord>,
     Ok(files)
 }
 
+pub async fn store_encrypted_data(
+    pool: &PgPool,
+    user_id: Uuid,
+    file_id: Uuid,
+    encrypted_data: &[u8],
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query!(
+        r#"
+        UPDATE files
+        SET encrypted_data = $1,
+            updated_at = NOW()
+        WHERE id = $2
+          AND user_id = $3
+        "#,
+        encrypted_data,
+        file_id,
+        user_id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected() == 1)
+}
+
+pub async fn get_encrypted_data(
+    pool: &PgPool,
+    user_id: Uuid,
+    file_id: Uuid,
+) -> Result<Option<Vec<u8>>, sqlx::Error> {
+    let file = sqlx::query!(
+        r#"
+        SELECT encrypted_data
+        FROM files
+        WHERE id = $1
+          AND user_id = $2
+        "#,
+        file_id,
+        user_id
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(file.and_then(|record| record.encrypted_data))
+}
+
 pub async fn delete_file(pool: &PgPool, user_id: Uuid, file_id: Uuid) -> Result<bool, sqlx::Error> {
     let result = sqlx::query!(
         r#"
@@ -197,6 +242,124 @@ mod tests {
             .execute(&pool)
             .await
             .expect("Failed to clean up test user");
+    }
+
+    #[tokio::test]
+    async fn store_and_retrieve_encrypted_data() {
+        let pool = test_pool().await;
+
+        let user_id = create_test_user(&pool).await;
+
+        let file = create_file(
+            &pool,
+            user_id,
+            "encrypted_filename",
+            "encrypted_file_key",
+            "encrypted_nonce",
+            10,
+        )
+        .await
+        .expect("Failed to create test file");
+
+        let encrypted_data = vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+        let stored = store_encrypted_data(&pool, user_id, file.id, &encrypted_data)
+            .await
+            .expect("Failed to store encrypted data");
+
+        assert!(stored);
+
+        let retrieved = get_encrypted_data(&pool, user_id, file.id)
+            .await
+            .expect("Failed to retrieve encrypted data")
+            .expect("Encrypted data was not found");
+
+        assert_eq!(retrieved, encrypted_data);
+
+        sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+            .execute(&pool)
+            .await
+            .expect("Failed to clean up test user");
+    }
+
+    #[tokio::test]
+    async fn get_encrypted_data_rejects_another_users_file() {
+        let pool = test_pool().await;
+
+        let owner_id = create_test_user(&pool).await;
+        let attacker_id = create_test_user(&pool).await;
+
+        let file = create_file(
+            &pool,
+            owner_id,
+            "owner_file",
+            "owner_key",
+            "owner_nonce",
+            10,
+        )
+        .await
+        .expect("Failed to create test file");
+
+        store_encrypted_data(&pool, owner_id, file.id, &[1u8, 2, 3, 4])
+            .await
+            .expect("Failed to store encrypted data");
+
+        let result = get_encrypted_data(&pool, attacker_id, file.id)
+            .await
+            .expect("Failed to query encrypted data");
+
+        assert!(result.is_none());
+
+        sqlx::query!("DELETE FROM users WHERE id = $1", owner_id)
+            .execute(&pool)
+            .await
+            .expect("Failed to clean up owner");
+
+        sqlx::query!("DELETE FROM users WHERE id = $1", attacker_id)
+            .execute(&pool)
+            .await
+            .expect("Failed to clean up attacker");
+    }
+
+    #[tokio::test]
+    async fn store_encrypted_data_rejects_another_users_file() {
+        let pool = test_pool().await;
+
+        let owner_id = create_test_user(&pool).await;
+        let attacker_id = create_test_user(&pool).await;
+
+        let file = create_file(
+            &pool,
+            owner_id,
+            "owner_file",
+            "owner_key",
+            "owner_nonce",
+            10,
+        )
+        .await
+        .expect("Failed to create test file");
+
+        let stored = store_encrypted_data(&pool, attacker_id, file.id, &[1u8, 2, 3, 4])
+            .await
+            .expect("Failed to attempt unauthorized write");
+
+        assert!(!stored);
+
+        let result = get_encrypted_data(&pool, owner_id, file.id)
+            .await
+            .expect("Failed to query encrypted data");
+
+        assert!(result.is_none());
+
+        sqlx::query!("DELETE FROM users WHERE id = $1", owner_id)
+            .execute(&pool)
+            .await
+            .expect("Failed to clean up owner");
+
+        sqlx::query!("DELETE FROM users WHERE id = $1", attacker_id)
+            .execute(&pool)
+            .await
+            .expect("Failed to clean up attacker");
     }
 
     #[tokio::test]

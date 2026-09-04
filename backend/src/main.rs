@@ -12,11 +12,22 @@ async fn main() {
 
     let config = Config::from_env().expect("Failed to load application configuration");
 
+    tracing::info!("Connecting to database...");
+
     let pool = database::connect(&config.database_url)
         .await
         .expect("Failed to connect to database");
 
     tracing::info!("Database connected");
+
+    tracing::info!("Running database migrations...");
+
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run database migrations");
+
+    tracing::info!("Database migrations complete");
 
     let app = create_app(pool, config.clone());
 
@@ -32,5 +43,7 @@ async fn main() {
         config.port
     );
 
-    axum::serve(listener, app).await.expect("Server error");
+    axum::serve(listener, app)
+        .await
+        .expect("Server error");
 }

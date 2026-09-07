@@ -1,5 +1,4 @@
 use sqlx::PgPool;
-
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -26,7 +25,7 @@ pub async fn create_user(
                 id,
                 email,
                 password_hash
-            "#,
+        "#,
         email,
         password_hash
     )
@@ -49,7 +48,7 @@ pub async fn find_user_by_email(
                 password_hash
             FROM users
             WHERE email = $1
-            "#,
+        "#,
         email
     )
     .fetch_optional(pool)
@@ -58,7 +57,10 @@ pub async fn find_user_by_email(
     Ok(user)
 }
 
-pub async fn find_user_by_id(pool: &PgPool, id: Uuid) -> Result<Option<UserRecord>, sqlx::Error> {
+pub async fn find_user_by_id(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<Option<UserRecord>, sqlx::Error> {
     let user = sqlx::query_as!(
         UserRecord,
         r#"
@@ -68,7 +70,7 @@ pub async fn find_user_by_id(pool: &PgPool, id: Uuid) -> Result<Option<UserRecor
                 password_hash
             FROM users
             WHERE id = $1
-            "#,
+        "#,
         id
     )
     .fetch_optional(pool)
@@ -79,7 +81,6 @@ pub async fn find_user_by_id(pool: &PgPool, id: Uuid) -> Result<Option<UserRecor
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     async fn test_pool() -> PgPool {
@@ -106,9 +107,7 @@ mod tests {
             .expect("Failed to create test user");
 
         assert_eq!(user.email, email);
-
         assert_eq!(user.password_hash, password_hash);
-
         assert!(!user.id.is_nil());
 
         sqlx::query!("DELETE FROM users WHERE id = $1", user.id)
@@ -157,9 +156,7 @@ mod tests {
             .expect("Expected test user to exist");
 
         assert_eq!(found_user.id, created_user.id);
-
         assert_eq!(found_user.email, email);
-
         assert_eq!(found_user.password_hash, password_hash);
 
         sqlx::query!("DELETE FROM users WHERE id = $1", created_user.id)

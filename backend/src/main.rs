@@ -3,6 +3,8 @@ use dotenvy::dotenv;
 use black_vault_api::app::create_app;
 use black_vault_api::config::Config;
 use black_vault_api::database;
+use black_vault_api::database::users::create_user;
+use black_vault_api::services::auth::hash_password;
 
 #[tokio::main]
 async fn main() {
@@ -29,6 +31,8 @@ async fn main() {
 
     tracing::info!("Database migrations complete");
 
+    seed_demo_user(&pool).await;
+
     let app = create_app(pool, config.clone());
 
     let address = format!("{}:{}", config.host, config.port);
@@ -46,4 +50,55 @@ async fn main() {
     axum::serve(listener, app)
         .await
         .expect("Server error");
+}
+
+async fn seed_demo_user(pool: &sqlx::PgPool) {
+    let enabled = std::env::var("DEMO_USER_ENABLED")
+        .map(|value| value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if !enabled {
+        tracing::debug!("Demo user seeding disabled");
+
+        return;
+    }
+
+    let email = std::env::var("DEMO_USER_EMAIL")
+        .unwrap_or_else(|_| "demo@blackvault.local".to_string());
+
+    let password = std::env::var("DEMO_USER_PASSWORD")
+        .unwrap_or_else(|_| "BlackVaultDev123!".to_string());
+
+    match black_vault_api::database::users::find_user_by_email(pool, &email).await {
+        Ok(Some(_)) => {
+            tracing::info!(
+                email = %email,
+                "Development demo user already exists"
+            );
+        }
+
+        Ok(None) => {
+            let password_hash =
+                hash_password(&password).expect("Failed to hash demo user password");
+
+            create_user(pool, &email, &password_hash)
+                .await
+                .expect("Failed to create development demo user");
+
+            tracing::info!(
+                email = %email,
+                "Development demo user created"
+            );
+        }
+
+        Err(error) => {
+            tracing::error!(
+                error = ?error,
+                email = %email,
+                "Failed to check for development demo user"
+            );
+
+            panic!("Failed to check for development demo user");
+        }
+    }
 }

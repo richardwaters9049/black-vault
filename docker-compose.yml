@@ -36,6 +36,9 @@ services:
       PORT: 8080
       JWT_SECRET: ${JWT_SECRET:-dev_secret_key_for_testing_only_change_in_production}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-3600}
+      DEMO_USER_ENABLED: ${DEMO_USER_ENABLED:-true}
+      DEMO_USER_EMAIL: ${DEMO_USER_EMAIL:-demo@blackvault.local}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-BlackVaultDev123!}
 
     ports:
       - "${BACKEND_PORT:-0}:8080"

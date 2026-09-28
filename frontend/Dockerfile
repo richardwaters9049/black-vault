@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-RUN npm ci
+RUN npm install
 
 ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1

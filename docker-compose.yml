@@ -41,7 +41,7 @@ services:
       DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-BlackVaultDev123!}
 
     ports:
-      - "${BACKEND_PORT:-0}:8080"
+      - "${BACKEND_PORT:-8080}:8080"
 
     depends_on:
       postgres:
@@ -62,22 +62,19 @@ services:
 
     environment:
       NODE_ENV: development
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:0}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"
 
     ports:
-      - "${FRONTEND_PORT:-0}:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
 
     volumes:
       - ./frontend:/app
       - black-vault-frontend-node-modules:/app/node_modules
       - black-vault-frontend-next:/app/.next
 
-    command:
-      - sh
-      - -c
-      - bun install --frozen-lockfile && bun run dev
+    command: npm run dev
 
     depends_on:
       - backend

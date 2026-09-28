@@ -1,14 +1,14 @@
-FROM oven/bun:1.2.21
+FROM node:20.9.0-slim
 
 WORKDIR /app
 
-COPY package.json bun.lock ./
+COPY package.json package-lock.json ./
 
-RUN bun install --frozen-lockfile
+RUN npm install
 
 ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1
 
 EXPOSE 3000
 
-CMD ["bun", "run", "dev"]
+CMD ["npm", "run", "dev"]

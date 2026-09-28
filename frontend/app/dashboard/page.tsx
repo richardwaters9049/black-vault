@@ -129,7 +129,7 @@ export default function DashboardPage() {
               <Button
                 onClick={handleLogout}
                 variant="outline"
-                className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+                className="border-slate-700 text-white hover:bg-white hover:text-blue-600 bg-blue-600 hover:cursor-pointer py-5 px-3"
               >
                 Sign out
               </Button>

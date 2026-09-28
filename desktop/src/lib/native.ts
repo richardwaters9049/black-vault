@@ -1,0 +1,42 @@
+import { invoke, isTauri } from '@tauri-apps/api/core';
+
+export interface DesktopInfo {
+  appName: string;
+  version: string;
+  platform: string;
+  architecture: string;
+}
+export interface SelectedFile {
+  name: string;
+  sizeBytes: number;
+}
+export interface NativeError { code: string; message: string }
+
+interface Commands {
+  get_desktop_info: DesktopInfo;
+  select_file: SelectedFile | null;
+}
+
+function call<K extends keyof Commands>(command: K): Promise<Commands[K]> {
+  if (!isTauri()) return Promise.reject(new Error('Open Black Vault as a desktop application to use native features.'));
+  return invoke<Commands[K]>(command);
+}
+export const native = {
+  getDesktopInfo: () => call('get_desktop_info'),
+  selectFile: () => call('select_file'),
+};
+
+export function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return 'The native operation could not be completed. Please try again.';
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+}

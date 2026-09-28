@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-#[derive(Debug)]
+#[derive(Debug, sqlx::FromRow)]
 pub struct FileRecord {
     pub id: Uuid,
     pub user_id: Uuid,

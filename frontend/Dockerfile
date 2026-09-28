@@ -1,10 +1,10 @@
-FROM node:20.9.0-slim
+FROM node:22.23.2-slim
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-RUN npm install
+RUN npm ci
 
 ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1

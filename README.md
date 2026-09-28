@@ -4,7 +4,7 @@ Black Vault is a security-focused file encryption and transfer platform designed
 
 The project is being built as a full-stack application with a Rust backend and a Next.js frontend. The long-term goal is to provide a controlled environment where users can securely encrypt, upload, store, transfer and decrypt sensitive files without exposing plaintext data unnecessarily to the server.
 
-> **Project status:** Authentication backend complete and tested. Frontend development is underway. File encryption, secure file storage/transfer workflows and full containerisation are the next major development stages.
+> **Project status (28 September 2026):** Rust ↔ TypeScript cryptographic compatibility verified. Vault creation, unlocking and locking are implemented, alongside version 2 client-encrypted file upload and retrieval (5 MiB limit). See [the dated development report](docs/28thSept2026_notes.md) for test results, format details and remaining work.
 
 ---
 

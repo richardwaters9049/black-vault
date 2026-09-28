@@ -3,3 +3,5 @@ pub mod error;
 pub mod files;
 pub mod user;
 pub mod vault;
+
+pub mod encrypted_files;

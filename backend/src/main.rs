@@ -47,9 +47,7 @@ async fn main() {
         config.port
     );
 
-    axum::serve(listener, app)
-        .await
-        .expect("Server error");
+    axum::serve(listener, app).await.expect("Server error");
 }
 
 async fn seed_demo_user(pool: &sqlx::PgPool) {
@@ -63,11 +61,11 @@ async fn seed_demo_user(pool: &sqlx::PgPool) {
         return;
     }
 
-    let email = std::env::var("DEMO_USER_EMAIL")
-        .unwrap_or_else(|_| "demo@blackvault.local".to_string());
+    let email =
+        std::env::var("DEMO_USER_EMAIL").unwrap_or_else(|_| "demo@blackvault.local".to_string());
 
-    let password = std::env::var("DEMO_USER_PASSWORD")
-        .unwrap_or_else(|_| "BlackVaultDev123!".to_string());
+    let password =
+        std::env::var("DEMO_USER_PASSWORD").unwrap_or_else(|_| "BlackVaultDev123!".to_string());
 
     match black_vault_api::database::users::find_user_by_email(pool, &email).await {
         Ok(Some(_)) => {

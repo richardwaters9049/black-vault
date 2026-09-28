@@ -1,3 +1,4 @@
+import type { FileRecord, FileUpload } from './file-crypto';
 import { API_URL } from "../config";
 import {
   User,
@@ -48,6 +49,27 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export const api = {
+  async uploadFile(token: string, data: FileUpload): Promise<FileRecord> {
+    return handleResponse<FileRecord>(await fetch(`${API_URL}/files/encrypted`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }));
+  },
+  async listFiles(token: string): Promise<{ files: FileRecord[] }> {
+    return handleResponse(await fetch(`${API_URL}/files`, { headers: { Authorization: `Bearer ${token}` } }));
+  },
+  async downloadFile(token: string, id: string): Promise<Uint8Array> {
+    const response = await fetch(`${API_URL}/files/${encodeURIComponent(id)}/data`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) await handleResponse(response);
+    return new Uint8Array(await response.arrayBuffer());
+  },
+  async deleteFile(token: string, id: string): Promise<void> {
+    return handleResponse(await fetch(`${API_URL}/files/${encodeURIComponent(id)}`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+    }));
+  },
   async register(data: RegisterRequest): Promise<User> {
     const response = await fetch(`${API_URL}/auth/register`, {
       method: "POST",

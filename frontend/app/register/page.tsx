@@ -8,7 +8,7 @@ import { Eye, EyeOff } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
-import { generateVaultKey, encryptVaultKey } from '@/lib/crypto';
+import { VaultSession } from '@/lib/vault-session';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -176,19 +176,8 @@ export default function RegisterPage() {
         email: authResponse.email,
       });
 
-      const vaultKey = generateVaultKey();
-
-      const vaultEnvelope = await encryptVaultKey(
-        vaultKey,
-        formData.vaultPassword,
-      );
-
-      await api.setupVault(authResponse.token, {
-        encrypted_vault_key: vaultEnvelope.encrypted_vault_key,
-        key_derivation_salt: vaultEnvelope.key_derivation_salt,
-        key_derivation_params: vaultEnvelope.key_derivation_params,
-        encryption_nonce: vaultEnvelope.encryption_nonce,
-      });
+      const vault = new VaultSession();
+      await vault.create(formData.vaultPassword, envelope => api.setupVault(authResponse.token, envelope));
 
       router.push('/dashboard');
     } catch (err) {
@@ -198,6 +187,7 @@ export default function RegisterPage() {
           : 'Registration failed',
       );
     } finally {
+      setFormData(previous => ({ ...previous, password: '', confirmPassword: '', vaultPassword: '', confirmVaultPassword: '' }));
       setIsLoading(false);
     }
   };

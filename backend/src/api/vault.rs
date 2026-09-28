@@ -141,6 +141,7 @@ pub async fn setup_vault(
         ErrorResponse::internal_server_error("Failed to setup vault")
     })?;
 
+    tracing::info!(user_id = %authenticated_user.0, event = "vault_created");
     Ok((
         StatusCode::CREATED,
         Json(SetupVaultResponse { success: true }),
@@ -170,6 +171,7 @@ pub async fn get_vault_key(
             ErrorResponse::internal_server_error("Failed to retrieve vault key")
         })?;
 
+    tracing::info!(user_id = %authenticated_user.0, event = "vault_envelope_retrieved");
     Ok((
         StatusCode::OK,
         Json(GetVaultKeyResponse {

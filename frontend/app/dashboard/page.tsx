@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { api } from '@/lib/api';
-import { decryptVaultKey } from '@/lib/crypto';
+import { api, ApiError } from '@/lib/api';
+import { VaultFiles } from '@/components/vault-files';
+import { VaultSession } from '@/lib/vault-session';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +14,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 export default function DashboardPage() {
   const router = useRouter();
   const { user, token, logout, isAuthenticated, isLoading } = useAuth();
+  const [session] = useState(() => new VaultSession());
+  const operation = useRef(0);
+  const [hasVault, setHasVault] = useState<boolean | null>(null);
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [apiError, setApiError] = useState('');
   const [isVerifying, setIsVerifying] = useState(true);
 
@@ -23,6 +28,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let isMounted = true;
+    const loadVault = async () => {
+      try {
+        await api.getVaultKey(token!);
+        if (isMounted) setHasVault(true);
+      } catch (error) {
+        if (!isMounted) return;
+        if (error instanceof ApiError && error.status === 404) setHasVault(false);
+        else throw error;
+      }
+    };
 
     const verifyToken = async () => {
       if (!token) {
@@ -31,16 +46,19 @@ export default function DashboardPage() {
 
       try {
         await api.getCurrentUser(token);
+        await loadVault();
         if (isMounted) {
           setApiError('');
         }
-      } catch {
+      } catch (error) {
         if (isMounted) {
-          setApiError('Session expired. Please log in again.');
-          setTimeout(() => {
+          session.lock();
+          if (error instanceof ApiError && error.status === 401) {
             logout();
             router.push('/login');
-          }, 2000);
+          } else {
+            setApiError('Unable to load your vault. Reload the page to retry.');
+          }
         }
       } finally {
         if (isMounted) {
@@ -64,10 +82,13 @@ export default function DashboardPage() {
 
     return () => {
       isMounted = false;
+      operation.current += 1;
+      session.lock();
     };
-  }, [isAuthenticated, isLoading, token, router, logout]);
+  }, [isAuthenticated, isLoading, token, router, logout, session]);
 
   const handleLogout = () => {
+    handleLockVault();
     logout();
     router.push('/login');
   };
@@ -81,32 +102,49 @@ export default function DashboardPage() {
       return;
     }
 
+    if (hasVault === null || !token) return;
+    if (!hasVault && (vaultPassword.length < 12 || vaultPassword !== confirmPassword)) {
+      setVaultError('Use at least 12 characters and matching passwords.');
+      return;
+    }
+    const currentOperation = ++operation.current;
     setIsUnlocking(true);
-
+    const password = vaultPassword;
+    setVaultPassword('');
+    setConfirmPassword('');
     try {
-      const vaultEnvelope = await api.getVaultKey(token!);
-      await decryptVaultKey(vaultEnvelope, vaultPassword);
-      setIsVaultUnlocked(true);
-      setVaultPassword('');
-    } catch (err) {
-      setVaultError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to unlock vault. Please check your vault password.'
-      );
+      if (!hasVault) {
+        const created = await session.create(password, envelope => api.setupVault(token, envelope));
+        if (!created || currentOperation !== operation.current) return;
+        setHasVault(true);
+      }
+      const unlocked = await session.unlock(password, () => api.getVaultKey(token));
+      if (currentOperation === operation.current) setIsVaultUnlocked(unlocked);
+    } catch (error) {
+      if (currentOperation !== operation.current) return;
+      if (error instanceof ApiError && error.status === 409) {
+        setHasVault(true);
+        setVaultError('A vault already exists. Unlock it with its original password.');
+      } else {
+        setVaultError('Unable to open the vault. Check your password and connection.');
+      }
     } finally {
-      setIsUnlocking(false);
+      if (currentOperation === operation.current) setIsUnlocking(false);
     }
   };
 
   const handleLockVault = () => {
+    operation.current += 1;
+    session.lock();
     setIsVaultUnlocked(false);
+    setIsUnlocking(false);
     setVaultPassword('');
+    setConfirmPassword('');
   };
 
   if (isLoading || isVerifying) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="py-24 flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
         <div className="text-slate-400">Loading...</div>
       </div>
     );
@@ -117,7 +155,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="pb-12 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       <nav className="border-b border-slate-800 bg-slate-900/50 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
@@ -153,9 +191,9 @@ export default function DashboardPage() {
         {!isVaultUnlocked ? (
           <Card className="border-slate-800 bg-slate-900/50 backdrop-blur mb-8">
             <CardHeader>
-              <CardTitle className="text-white">Unlock Vault</CardTitle>
+              <CardTitle className="text-white">{hasVault === null ? 'Vault unavailable' : hasVault ? 'Unlock Vault' : 'Create Vault'}</CardTitle>
               <CardDescription className="text-slate-400">
-                Enter your vault password to access encrypted features
+                {hasVault ? 'Enter your vault password to access encrypted features' : 'Choose a separate vault password. It cannot be recovered if forgotten.'}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -170,10 +208,18 @@ export default function DashboardPage() {
                     placeholder="Enter your vault password"
                     value={vaultPassword}
                     onChange={(e) => setVaultPassword(e.target.value)}
-                    disabled={isUnlocking}
+                    disabled={isUnlocking || hasVault === null}
                     className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
                   />
                 </div>
+                {!hasVault && (
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword">Confirm vault password</Label>
+                    <Input id="confirmPassword" type="password" autoComplete="new-password"
+                      value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                      disabled={isUnlocking || hasVault === null} className="border-slate-700 bg-slate-800 text-white" />
+                  </div>
+                )}
                 {vaultError && (
                   <div className="text-sm text-red-400 bg-red-950/30 border border-red-900/50 p-3 rounded">
                     {vaultError}
@@ -181,10 +227,10 @@ export default function DashboardPage() {
                 )}
                 <Button
                   type="submit"
-                  disabled={isUnlocking}
+                  disabled={isUnlocking || hasVault === null}
                   className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  {isUnlocking ? 'Unlocking...' : 'Unlock Vault'}
+                  {isUnlocking ? 'Opening vault...' : hasVault ? 'Unlock Vault' : 'Create Vault'}
                 </Button>
               </form>
             </CardContent>
@@ -209,19 +255,9 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
-            <CardHeader>
-              <CardTitle className="text-white">Secure Files</CardTitle>
-              <CardDescription className="text-slate-400">
-                Upload and encrypt your sensitive files
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-500 text-sm">Coming soon</p>
-            </CardContent>
-          </Card>
+        {isVaultUnlocked && token && <VaultFiles token={token} session={session} />}
 
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card className="border-slate-800 bg-slate-900/50 backdrop-blur">
             <CardHeader>
               <CardTitle className="text-white">Encryption Keys</CardTitle>

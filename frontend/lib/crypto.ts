@@ -54,19 +54,28 @@ export function deriveKey(
   params: DerivationParams,
 ): Uint8Array {
   const salt = base64ToBuffer(params.salt);
+  if (salt.length !== 16 || params.t_cost !== 2 || params.m_cost !== 19456 ||
+      params.p_cost !== 1 || params.output_len !== VAULT_KEY_SIZE) {
+    throw new Error("Unsupported derivation parameters");
+  }
   const passwordBytes = utf8ToBytes(password);
 
-  return argon2id(passwordBytes, salt, {
-    t: params.t_cost,
-    m: params.m_cost,
-    p: params.p_cost,
-    dkLen: params.output_len,
-  });
+  try {
+    return argon2id(passwordBytes, salt, {
+      t: params.t_cost,
+      m: params.m_cost,
+      p: params.p_cost,
+      dkLen: params.output_len,
+    });
+  } finally {
+    passwordBytes.fill(0);
+  }
 }
 
-export function encrypt(plaintext: Uint8Array, key: Uint8Array): EncryptedData {
+export function encrypt(plaintext: Uint8Array, key: Uint8Array, additionalData?: Uint8Array): EncryptedData {
+  if (key.length !== VAULT_KEY_SIZE) throw new Error("Invalid key length");
   const nonce = randomBytes(NONCE_SIZE);
-  const aes = gcm(key, nonce);
+  const aes = gcm(key, nonce, additionalData);
 
   const ciphertext = aes.encrypt(plaintext);
 
@@ -76,11 +85,14 @@ export function encrypt(plaintext: Uint8Array, key: Uint8Array): EncryptedData {
   };
 }
 
-export function decrypt(encrypted: EncryptedData, key: Uint8Array): Uint8Array {
+export function decrypt(encrypted: EncryptedData, key: Uint8Array, additionalData?: Uint8Array): Uint8Array {
+  if (key.length !== VAULT_KEY_SIZE) throw new Error("Invalid key length");
   const nonce = base64ToBuffer(encrypted.nonce);
+  if (nonce.length !== NONCE_SIZE) throw new Error("Invalid nonce length");
   const ciphertext = base64ToBuffer(encrypted.ciphertext);
 
-  const aes = gcm(key, nonce);
+  if (ciphertext.length < 16) throw new Error("Invalid ciphertext length");
+  const aes = gcm(key, nonce, additionalData);
 
   return aes.decrypt(ciphertext);
 }
@@ -89,23 +101,33 @@ export function encryptVaultKey(
   vaultKey: Uint8Array,
   vaultPassword: string,
 ): VaultKeyEnvelope {
+  if (vaultKey.length !== VAULT_KEY_SIZE) throw new Error("Invalid vault key length");
   const params = generateDerivationParams();
   const derivedKey = deriveKey(vaultPassword, params);
-  const encrypted = encrypt(vaultKey, derivedKey);
+  try {
+    const encrypted = encrypt(vaultKey, derivedKey);
 
-  return {
-    encrypted_vault_key: encrypted.ciphertext,
-    key_derivation_salt: params.salt,
-    key_derivation_params: params,
-    encryption_nonce: encrypted.nonce,
-    encryption_version: "1",
-  };
+    return {
+      encrypted_vault_key: encrypted.ciphertext,
+      key_derivation_salt: params.salt,
+      key_derivation_params: params,
+      encryption_nonce: encrypted.nonce,
+      encryption_version: "1",
+    };
+  } finally {
+    derivedKey.fill(0);
+  }
 }
 
 export function decryptVaultKey(
   envelope: VaultKeyEnvelope,
   vaultPassword: string,
 ): Uint8Array {
+  if (envelope.encryption_version !== "1" ||
+      envelope.key_derivation_salt !== envelope.key_derivation_params.salt ||
+      base64ToBuffer(envelope.encrypted_vault_key).length !== 48) {
+    throw new Error("Invalid vault envelope metadata");
+  }
   const derivedKey = deriveKey(vaultPassword, envelope.key_derivation_params);
 
   const encrypted: EncryptedData = {
@@ -113,7 +135,11 @@ export function decryptVaultKey(
     nonce: envelope.encryption_nonce,
   };
 
-  return decrypt(encrypted, derivedKey);
+  try {
+    return decrypt(encrypted, derivedKey);
+  } finally {
+    derivedKey.fill(0);
+  }
 }
 
 function bufferToBase64(buffer: Uint8Array): string {
@@ -129,6 +155,7 @@ function bufferToBase64(buffer: Uint8Array): string {
 
 function base64ToBuffer(base64: string): Uint8Array {
   const binary = atob(base64);
+  if (btoa(binary) !== base64) throw new Error("Invalid standard Base64 encoding");
   const bytes = new Uint8Array(binary.length);
 
   for (let i = 0; i < binary.length; i++) {

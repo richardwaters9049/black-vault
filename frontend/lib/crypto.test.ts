@@ -55,3 +55,13 @@ describe("Vault cryptography", () => {
     expect(vaultKey).toHaveLength(32);
   });
 });
+
+it('rejects malformed vault metadata before attempting expensive derivation', () => {
+  const envelope = encryptVaultKey(generateVaultKey(), 'password');
+  for (const invalid of [
+    { ...envelope, encryption_version: 'unknown' },
+    { ...envelope, key_derivation_salt: 'mismatch' },
+    { ...envelope, encryption_nonce: btoa('short') },
+    { ...envelope, key_derivation_params: { ...envelope.key_derivation_params, m_cost: 2 ** 31 } },
+  ]) expect(() => decryptVaultKey(invalid, 'password')).toThrow();
+});

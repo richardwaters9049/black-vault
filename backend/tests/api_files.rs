@@ -774,3 +774,126 @@ async fn delete_file_rejects_another_users_file() {
     cleanup_user(&pool, owner_id).await;
     cleanup_user(&pool, attacker_id).await;
 }
+
+fn v2_payload() -> Value {
+    json!({
+        "encrypted_filename": general_purpose::STANDARD.encode([1u8; 32]),
+        "encrypted_file_key": general_purpose::STANDARD.encode([2u8; 60]),
+        "encryption_nonce": general_purpose::STANDARD.encode([3u8; 12]),
+        "encryption_version": "2", "file_size": 4,
+        "encrypted_data": general_purpose::STANDARD.encode([4u8; 20]),
+    })
+}
+
+#[tokio::test]
+async fn v2_upload_is_atomic_owned_and_immutable() {
+    let pool = test_pool().await;
+    let user_id = create_test_user(&pool).await;
+    let other_id = create_test_user(&pool).await;
+    black_vault_api::database::vault_keys::create_vault_key(
+        &pool,
+        user_id,
+        "test",
+        "test",
+        &json!({}),
+        "test",
+    )
+    .await
+    .unwrap();
+    let upload = Request::builder()
+        .method("POST")
+        .uri("/files/encrypted")
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {}", test_token(user_id)))
+        .body(Body::from(v2_payload().to_string()))
+        .unwrap();
+    let response = test_app(pool.clone()).oneshot(upload).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let record = response_json(response).await;
+    assert_eq!(record["encryption_version"], "2");
+    let id = record["id"].as_str().unwrap();
+    for (actor, expected) in [(user_id, StatusCode::OK), (other_id, StatusCode::NOT_FOUND)] {
+        let request = Request::builder()
+            .uri(format!("/files/{id}/data"))
+            .header("authorization", format!("Bearer {}", test_token(actor)))
+            .body(Body::empty())
+            .unwrap();
+        let response = test_app(pool.clone()).oneshot(request).await.unwrap();
+        assert_eq!(response.status(), expected);
+        if actor == user_id {
+            assert_eq!(
+                axum::body::to_bytes(response.into_body(), 100)
+                    .await
+                    .unwrap()
+                    .as_ref(),
+                &[4u8; 20]
+            );
+        }
+    }
+    let overwrite = Request::builder()
+        .method("PUT")
+        .uri(format!("/files/{id}/data"))
+        .header("authorization", format!("Bearer {}", test_token(user_id)))
+        .body(Body::from(vec![5u8; 20]))
+        .unwrap();
+    assert_eq!(
+        test_app(pool.clone())
+            .oneshot(overwrite)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    cleanup_user(&pool, user_id).await;
+    cleanup_user(&pool, other_id).await;
+}
+
+#[tokio::test]
+async fn v2_upload_requires_authentication_vault_and_valid_metadata() {
+    let pool = test_pool().await;
+    let user_id = create_test_user(&pool).await;
+    for (token, payload, expected) in [
+        (None, v2_payload(), StatusCode::UNAUTHORIZED),
+        (
+            Some(test_token(user_id)),
+            v2_payload(),
+            StatusCode::CONFLICT,
+        ),
+        (
+            Some(test_token(user_id)),
+            {
+                let mut p = v2_payload();
+                p["file_size"] = json!(5);
+                p
+            },
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            Some(test_token(user_id)),
+            {
+                let mut p = v2_payload();
+                p["encrypted_file_key"] = json!("invalid");
+                p
+            },
+            StatusCode::BAD_REQUEST,
+        ),
+    ] {
+        let mut builder = Request::builder()
+            .method("POST")
+            .uri("/files/encrypted")
+            .header("content-type", "application/json");
+        if let Some(token) = token {
+            builder = builder.header("authorization", format!("Bearer {token}"));
+        }
+        let response = test_app(pool.clone())
+            .oneshot(builder.body(Body::from(payload.to_string())).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+    }
+    assert!(black_vault_api::database::files::list_files(&pool, user_id)
+        .await
+        .unwrap()
+        .is_empty());
+    cleanup_user(&pool, user_id).await;
+}

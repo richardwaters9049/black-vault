@@ -1,4 +1,5 @@
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{get, post, put},
     Router,
 };
@@ -29,6 +30,10 @@ pub fn create_app(pool: sqlx::PgPool, config: Config) -> Router {
         .route("/vault/setup", post(setup_vault))
         .route("/vault/key", get(get_vault_key))
         .route("/files", post(create).get(list))
+        .route(
+            "/files/encrypted",
+            post(crate::api::encrypted_files::upload).layer(DefaultBodyLimit::max(7 * 1024 * 1024)),
+        )
         .route("/files/{file_id}", get(get_file).delete(delete_file))
         .route("/files/{file_id}/data", put(upload_data).get(download_data))
         .route_layer(axum::middleware::from_fn_with_state(

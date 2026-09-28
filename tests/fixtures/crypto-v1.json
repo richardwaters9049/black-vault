@@ -1,0 +1,34 @@
+[
+  {
+    "password": "Black Vault compatibility",
+    "params": {
+      "salt": "AAECAwQFBgcICQoLDA0ODw==",
+      "t_cost": 2,
+      "m_cost": 19456,
+      "p_cost": 1,
+      "output_len": 32
+    },
+    "key": "BsihHysC8Y1BbqHeXV6aCeoaXdDgvGupoa3cA2u+IOY=",
+    "plaintext": "//79/Pv6+fj39vX08/Lx8O/u7ezr6uno5+bl5OPi4eA=",
+    "encrypted": {
+      "nonce": "AAECAwQFBgcICQoL",
+      "ciphertext": "UdJXQRI/xQ/MejRO16JI33/Epvod9Tw66O3p9uSFRa9GzyWmdFqmIKKJ4Kk8g8WE"
+    }
+  },
+  {
+    "password": "Café 🔐 密碼",
+    "params": {
+      "salt": "EBESExQVFhcYGRobHB0eHw==",
+      "t_cost": 2,
+      "m_cost": 19456,
+      "p_cost": 1,
+      "output_len": 32
+    },
+    "key": "K3B9HM2bSnmdtu5ct3RUd3F8ESpopV2nJy7D3jMXmrk=",
+    "plaintext": "//79/Pv6+fj39vX08/Lx8O/u7ezr6uno5+bl5OPi4eA=",
+    "encrypted": {
+      "nonce": "DA0ODxAREhMUFRYX",
+      "ciphertext": "+DMQLRX4FhsqdDFL+JnZ+fYWzcIxEnROHmzrdBNOancv8CsB+N6kY9DzbyVvMv/s"
+    }
+  }
+]

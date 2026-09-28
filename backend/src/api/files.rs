@@ -155,6 +155,12 @@ pub async fn upload_data(
         })?
         .ok_or_else(|| ErrorResponse::not_found("File not found"))?;
 
+    if file.encryption_version != "1" {
+        return Err(ErrorResponse::conflict(
+            "Completed encrypted files cannot be overwritten",
+        ));
+    }
+
     let expected_encrypted_size = usize::try_from(file.file_size)
         .ok()
         .and_then(|size| size.checked_add(AES_GCM_TAG_LENGTH));
@@ -217,6 +223,7 @@ pub async fn download_data(
         })?
         .ok_or_else(|| ErrorResponse::not_found("Encrypted file data not found"))?;
 
+    tracing::info!(%user_id, %file_id, event = "encrypted_file_downloaded");
     Ok((
         [(CONTENT_TYPE, "application/octet-stream")],
         Bytes::from(encrypted_data),
@@ -237,6 +244,7 @@ pub async fn list(
         ErrorResponse::internal_server_error("Failed to list files")
     })?;
 
+    tracing::info!(%user_id, event = "encrypted_files_listed");
     Ok(Json(FileListResponse {
         files: files.into_iter().map(FileResponse::from).collect(),
     }))
@@ -261,6 +269,7 @@ pub async fn get(
         })?
         .ok_or_else(|| ErrorResponse::not_found("File not found"))?;
 
+    tracing::info!(%user_id, %file_id, event = "encrypted_file_metadata_retrieved");
     Ok(Json(file.into()))
 }
 
@@ -286,5 +295,6 @@ pub async fn delete(
         return Err(ErrorResponse::not_found("File not found"));
     }
 
+    tracing::info!(%user_id, %file_id, event = "encrypted_file_deleted");
     Ok(StatusCode::NO_CONTENT)
 }

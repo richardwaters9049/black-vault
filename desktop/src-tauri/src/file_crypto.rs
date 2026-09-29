@@ -266,7 +266,7 @@ pub fn persist_new(dir: &Path, id: &str, bytes: &[u8]) -> Result<(), VaultError>
     if !valid_id(id) || bytes.len() as u64 > MAX_ENVELOPE_BYTES {
         return Err(invalid());
     }
-    let temp = dir.join(format!(".{id}.tmp"));
+    let temp = dir.join(format!(".{id}.{}.tmp", random_id()));
     let final_path = dir.join(format!("{id}.bvfile"));
     if final_path.exists() {
         return Err(VaultError::storage_error());

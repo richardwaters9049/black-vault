@@ -540,7 +540,10 @@ impl VaultStore {
             name,
             content.as_bytes(),
         )?;
-        let temp = dir.join(format!(".{file_id}.update-tmp"));
+        let temp = dir.join(format!(
+            ".{file_id}.{}.update-tmp",
+            crate::file_crypto::random_id()
+        ));
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -888,6 +891,109 @@ impl VaultStore {
         })
     }
 
+    // Best-effort cleanup of encrypted, abandoned staging files only. Never
+    // follow links, touch unknown names, or remove a staging file unless its
+    // corresponding final envelope is present and authenticated.
+    fn cleanup_authenticated_staging(
+        &self,
+        vault: &OpenVault,
+        dir: &std::path::Path,
+        nested_id: &str,
+    ) -> Result<usize, VaultError> {
+        let final_path = dir.join(format!("{nested_id}.bvlock"));
+        let bytes = crate::file_crypto::read_regular(&final_path, 32 * 1024 * 1024)?;
+        let record: NestedVaultRecord =
+            serde_json::from_slice(&bytes).map_err(|_| VaultError::file_invalid())?;
+        if record.version != 1 || record.id != nested_id || record.parent_id != vault.id {
+            return Err(VaultError::file_invalid());
+        }
+        open(&vault.master_key, nested_id, &record.parent_wrapped)?;
+        let prefix = format!(".{nested_id}.");
+        let mut cleaned = 0;
+        for entry in fs::read_dir(dir).map_err(|_| VaultError::storage())? {
+            let entry = entry.map_err(|_| VaultError::storage())?;
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            let Some(suffix) = name
+                .strip_prefix(&prefix)
+                .and_then(|v| v.strip_suffix(".nested-tmp"))
+            else {
+                continue;
+            };
+            if !crate::file_crypto::valid_id(suffix) {
+                continue;
+            }
+            let metadata = fs::symlink_metadata(entry.path()).map_err(|_| VaultError::storage())?;
+            if !metadata.file_type().is_file() {
+                continue;
+            }
+            fs::remove_file(entry.path()).map_err(|_| VaultError::storage())?;
+            cleaned += 1;
+        }
+        if cleaned > 0 {
+            File::open(dir)
+                .map_err(|_| VaultError::storage())?
+                .sync_all()
+                .map_err(|_| VaultError::storage())?;
+        }
+        Ok(cleaned)
+    }
+
+    // Only an authenticated, byte-identical envelope can be reconciled. A mismatch
+    // is never overwritten or deleted: it requires explicit human intervention.
+    fn reconcile_nested_duplicates(
+        &self,
+        vault: &OpenVault,
+        dir: &std::path::Path,
+        payload: &NestedVaultPayload,
+    ) -> Result<usize, VaultError> {
+        let mut duplicates = Vec::new();
+        for (id, encoded) in &payload.files {
+            if !valid_id(id) {
+                return Err(VaultError::file_invalid());
+            }
+            let expected = STANDARD
+                .decode(encoded)
+                .map_err(|_| VaultError::file_invalid())?;
+            crate::file_crypto::open(&vault.id, id, &vault.master_key, &expected)?;
+            let parent = dir.join(format!("{id}.bvfile"));
+            match fs::symlink_metadata(&parent) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(_) => return Err(VaultError::storage()),
+                Ok(metadata) if !metadata.file_type().is_file() => {
+                    return Err(VaultError::new(
+                        "recovery_conflict",
+                        "A conflicting parent file requires manual review.",
+                    ));
+                }
+                Ok(_) => {}
+            }
+            let existing = crate::file_crypto::read_regular(&parent, 8 * 1024 * 1024)?;
+            crate::file_crypto::open(&vault.id, id, &vault.master_key, &existing)?;
+            if existing.as_slice() != expected.as_slice() {
+                return Err(VaultError::new(
+                    "recovery_conflict",
+                    "Two authenticated but different copies share an ID. Neither was deleted.",
+                ));
+            }
+            duplicates.push(parent);
+        }
+        // Validate the entire set before deleting anything. The nested record is
+        // already durable and authenticated, so it is the canonical recovery copy.
+        for parent in &duplicates {
+            fs::remove_file(parent).map_err(|_| VaultError::storage())?;
+        }
+        if !duplicates.is_empty() {
+            File::open(dir)
+                .map_err(|_| VaultError::storage())?
+                .sync_all()
+                .map_err(|_| VaultError::storage())?;
+        }
+        Ok(duplicates.len())
+    }
+
     pub fn unlock_nested_vault(
         &self,
         id: &str,
@@ -924,6 +1030,8 @@ impl VaultStore {
         };
         let payload: NestedVaultPayload =
             serde_json::from_slice(&payload_bytes).map_err(|_| VaultError::file_invalid())?;
+        self.reconcile_nested_duplicates(vault, &dir, &payload)?;
+        self.cleanup_authenticated_staging(vault, &dir, id)?;
         let mut result = Vec::new();
         for (file_id, bytes) in payload.files {
             let sealed = STANDARD
@@ -1040,7 +1148,10 @@ impl VaultStore {
         }
         // Atomic replacement: the old nested record remains intact until the new
         // ciphertext is completely written and synchronised.
-        let temp = dir.join(format!(".{id}.nested-tmp"));
+        let temp = dir.join(format!(
+            ".{id}.{}.nested-tmp",
+            crate::file_crypto::random_id()
+        ));
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -1070,6 +1181,153 @@ impl VaultStore {
             result.push(info);
         }
         Ok(result)
+    }
+
+    pub fn transfer_parent_file_to_nested(
+        &self,
+        id: &str,
+        password: String,
+        file_id: &str,
+    ) -> Result<Vec<crate::file_crypto::VaultFile>, VaultError> {
+        if !valid_id(id) || !crate::file_crypto::valid_id(file_id) {
+            return Err(VaultError::file_invalid());
+        }
+        if password.len() != 4 || !password.bytes().all(|digit| digit.is_ascii_digit()) {
+            return Err(VaultError::new(
+                "invalid_nested_pin",
+                "Enter exactly four digits (0–9).",
+            ));
+        }
+        let password = Zeroizing::new(password);
+        let guard = self.lock_active()?;
+        let vault = guard.as_ref().ok_or_else(VaultError::locked)?;
+        self.check_nested_attempt(id)?;
+        let dir = self.active_file_dir(vault)?;
+        let path = dir.join(format!("{id}.bvlock"));
+        let bytes = crate::file_crypto::read_regular(&path, 32 * 1024 * 1024)?;
+        let record: NestedVaultRecord =
+            serde_json::from_slice(&bytes).map_err(|_| VaultError::file_invalid())?;
+        if record.version != 1 || record.id != id || record.parent_id != vault.id {
+            return Err(VaultError::file_invalid());
+        }
+        let inner = open(&vault.master_key, id, &record.parent_wrapped)?;
+        let wrapped: WrappedSecret =
+            serde_json::from_slice(&inner).map_err(|_| VaultError::file_invalid())?;
+        let kek = derive(&password, &record.kdf)?;
+        let payload_bytes = match open(&kek, id, &wrapped) {
+            Ok(bytes) => {
+                self.record_nested_attempt(id, true)?;
+                bytes
+            }
+            Err(error) => {
+                self.record_nested_attempt(id, false)?;
+                return Err(error);
+            }
+        };
+        let mut payload: NestedVaultPayload =
+            serde_json::from_slice(&payload_bytes).map_err(|_| VaultError::file_invalid())?;
+        self.reconcile_nested_duplicates(vault, &dir, &payload)?;
+        // Authenticate every existing envelope before changing the nested record.
+        if payload.files.len() >= 5 {
+            return Err(VaultError::new(
+                "nested_vault_limit",
+                "A nested vault supports up to five files.",
+            ));
+        }
+        let mut inventory = Vec::new();
+        let mut total_bytes = 0usize;
+        for (candidate, encoded) in &payload.files {
+            if !crate::file_crypto::valid_id(candidate) || candidate == file_id {
+                return Err(VaultError::new(
+                    "duplicate_file",
+                    "This file is already in the nested vault.",
+                ));
+            }
+            let sealed = STANDARD
+                .decode(encoded)
+                .map_err(|_| VaultError::file_invalid())?;
+            let (info, _) =
+                crate::file_crypto::open(&vault.id, candidate, &vault.master_key, &sealed)?;
+            total_bytes += sealed.len();
+            inventory.push(info);
+        }
+        let source = dir.join(format!("{file_id}.bvfile"));
+        let sealed = crate::file_crypto::read_regular(&source, 8 * 1024 * 1024)?;
+        let (info, _) = crate::file_crypto::open(&vault.id, file_id, &vault.master_key, &sealed)?;
+        if inventory
+            .iter()
+            .any(|existing| existing.name.eq_ignore_ascii_case(&info.name))
+        {
+            return Err(VaultError::new(
+                "duplicate_filename",
+                "A file with this name already exists in the nested vault.",
+            ));
+        }
+        total_bytes += sealed.len();
+        if total_bytes > 10 * 1024 * 1024 {
+            return Err(VaultError::new(
+                "nested_vault_limit",
+                "Encrypted files exceed the 10 MiB nested vault limit.",
+            ));
+        }
+        payload
+            .files
+            .push((file_id.to_owned(), STANDARD.encode(&sealed)));
+        let encoded_payload =
+            Zeroizing::new(serde_json::to_vec(&payload).map_err(|_| VaultError::storage())?);
+        if encoded_payload.len() > 20 * 1024 * 1024 {
+            return Err(VaultError::new(
+                "nested_vault_limit",
+                "The nested vault has reached its storage limit.",
+            ));
+        }
+        let new_inner = Zeroizing::new(
+            serde_json::to_vec(&seal(&kek, id, &encoded_payload)?)
+                .map_err(|_| VaultError::storage())?,
+        );
+        let updated = NestedVaultRecord {
+            version: record.version,
+            parent_id: record.parent_id,
+            id: record.id,
+            kdf: record.kdf,
+            parent_wrapped: seal(&vault.master_key, id, &new_inner)?,
+        };
+        let encoded = serde_json::to_vec(&updated).map_err(|_| VaultError::storage())?;
+        if encoded.len() > 32 * 1024 * 1024 {
+            return Err(VaultError::storage());
+        }
+        // Commit the nested encrypted copy first. An interruption may leave duplicate
+        // ciphertext, never an unencrypted file or a deleted sole copy.
+        let temp = dir.join(format!(
+            ".{id}.{}.nested-tmp",
+            crate::file_crypto::random_id()
+        ));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let write_result = (|| -> std::io::Result<()> {
+            let mut output = options.open(&temp)?;
+            output.write_all(&encoded)?;
+            output.sync_all()?;
+            fs::rename(&temp, &path)?;
+            File::open(&dir)?.sync_all()?;
+            Ok(())
+        })();
+        if write_result.is_err() {
+            let _ = fs::remove_file(&temp);
+            return Err(VaultError::storage());
+        }
+        fs::remove_file(&source).map_err(|_| VaultError::storage())?;
+        File::open(&dir)
+            .map_err(|_| VaultError::storage())?
+            .sync_all()
+            .map_err(|_| VaultError::storage())?;
+        inventory.push(info);
+        Ok(inventory)
     }
 
     pub fn manage_nested_file(
@@ -1170,13 +1428,30 @@ impl VaultStore {
         } else {
             if action == "transfer_to_parent" {
                 let destination = dir.join(format!("{file_id}.bvfile"));
-                if destination.exists() {
-                    return Err(VaultError::new(
-                        "restore_conflict",
-                        "A parent file with this ID already exists.",
-                    ));
+                match fs::symlink_metadata(&destination) {
+                    Ok(metadata) if metadata.file_type().is_file() => {
+                        let existing =
+                            crate::file_crypto::read_regular(&destination, 8 * 1024 * 1024)?;
+                        crate::file_crypto::open(&vault.id, file_id, &vault.master_key, &existing)?;
+                        if existing.as_slice() != sealed.as_slice() {
+                            return Err(VaultError::new(
+                                "recovery_conflict",
+                                "A different authenticated parent copy exists. Neither copy was changed.",
+                            ));
+                        }
+                        // Identical ciphertext: resume an interrupted transfer.
+                    }
+                    Ok(_) => {
+                        return Err(VaultError::new(
+                            "recovery_conflict",
+                            "The parent destination is not a regular file.",
+                        ));
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        crate::file_crypto::persist_new(&dir, file_id, &sealed)?;
+                    }
+                    Err(_) => return Err(VaultError::storage()),
                 }
-                crate::file_crypto::persist_new(&dir, file_id, &sealed)?;
             }
             payload.files.remove(index);
         }
@@ -1200,7 +1475,10 @@ impl VaultStore {
         if encoded.len() > 32 * 1024 * 1024 {
             return Err(VaultError::storage());
         }
-        let temp = dir.join(format!(".{id}.nested-tmp"));
+        let temp = dir.join(format!(
+            ".{id}.{}.nested-tmp",
+            crate::file_crypto::random_id()
+        ));
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -1330,23 +1608,43 @@ impl VaultStore {
             serde_json::from_slice(&payload_bytes).map_err(|_| VaultError::file_invalid())?;
         let mut restored = Vec::new();
         for (file_id, encoded) in &payload.files {
-            if !valid_id(file_id) || dir.join(format!("{file_id}.bvfile")).exists() {
-                return Err(VaultError::new(
-                    "restore_conflict",
-                    "A file already exists with the same ID. No files were restored.",
-                ));
+            if !valid_id(file_id) {
+                return Err(VaultError::file_invalid());
             }
             let sealed = STANDARD
                 .decode(encoded)
                 .map_err(|_| VaultError::file_invalid())?;
             let (info, _) =
                 crate::file_crypto::open(&vault.id, file_id, &vault.master_key, &sealed)?;
+            let destination = dir.join(format!("{file_id}.bvfile"));
+            match fs::symlink_metadata(&destination) {
+                Ok(metadata) if metadata.file_type().is_file() => {
+                    let existing = crate::file_crypto::read_regular(&destination, 8 * 1024 * 1024)?;
+                    crate::file_crypto::open(&vault.id, file_id, &vault.master_key, &existing)?;
+                    if existing.as_slice() != sealed.as_slice() {
+                        return Err(VaultError::new(
+                            "recovery_conflict",
+                            "A different authenticated parent copy exists. No files were restored.",
+                        ));
+                    }
+                }
+                Ok(_) => {
+                    return Err(VaultError::new(
+                        "recovery_conflict",
+                        "The parent destination is not a regular file.",
+                    ));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => return Err(VaultError::storage()),
+            }
             restored.push((info, sealed));
         }
         // Persist all encrypted envelopes before removing the child container.
         // An interruption can leave duplicate ciphertext but not lose the only copy.
         for (info, sealed) in &restored {
-            crate::file_crypto::persist_new(&dir, &info.id, sealed)?;
+            if fs::symlink_metadata(dir.join(format!("{}.bvfile", info.id))).is_err() {
+                crate::file_crypto::persist_new(&dir, &info.id, sealed)?;
+            }
         }
         fs::remove_file(path).map_err(|_| VaultError::storage())?;
         File::open(&dir)
@@ -1601,6 +1899,201 @@ mod tests {
                 .unwrap_err()
                 .code,
             "vault_locked"
+        );
+    }
+
+    #[test]
+    fn recovery_removes_only_known_regular_staging_files() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let parent = store.create("Parent".into(), PASSWORD.into()).unwrap();
+        let first = store.create_text_file("one.txt", "First").unwrap();
+        let nested = store
+            .lock_selected_files("Nested".into(), "0427".into(), vec![first.id.clone()])
+            .unwrap();
+        let root = dir
+            .path()
+            .join("vaults")
+            .join(format!("{}.files", parent.id));
+        let stale = root.join(format!(
+            ".{}.{}.nested-tmp",
+            nested.id,
+            crate::file_crypto::random_id()
+        ));
+        let unknown = root.join(".unknown.nested-tmp");
+        fs::write(&stale, b"abandoned encrypted staging").unwrap();
+        fs::write(&unknown, b"unrelated").unwrap();
+        #[cfg(unix)]
+        let link = {
+            let path = root.join(format!(
+                ".{}.{}.nested-tmp",
+                nested.id,
+                crate::file_crypto::random_id()
+            ));
+            std::os::unix::fs::symlink(&unknown, &path).unwrap();
+            path
+        };
+        store
+            .unlock_nested_vault(&nested.id, "0427".into())
+            .unwrap();
+        assert!(!stale.exists());
+        assert!(unknown.exists());
+        #[cfg(unix)]
+        assert!(fs::symlink_metadata(link).unwrap().file_type().is_symlink());
+    }
+
+    #[test]
+    fn crash_recovery_reconciles_identical_parent_duplicate_and_preserves_conflicts() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let parent = store.create("Parent".into(), PASSWORD.into()).unwrap();
+        let first = store.create_text_file("one.txt", "First").unwrap();
+        let second = store.create_text_file("two.txt", "Second").unwrap();
+        let root = dir
+            .path()
+            .join("vaults")
+            .join(format!("{}.files", parent.id));
+        let duplicate = fs::read(root.join(format!("{}.bvfile", first.id))).unwrap();
+        let nested = store
+            .lock_selected_files("Nested".into(), "0427".into(), vec![first.id.clone()])
+            .unwrap();
+        // Simulate crash after nested fsync but before source unlink.
+        fs::write(root.join(format!("{}.bvfile", first.id)), &duplicate).unwrap();
+        assert_eq!(
+            store
+                .unlock_nested_vault(&nested.id, "0427".into())
+                .unwrap(),
+            vec![first.clone()]
+        );
+        assert!(!root.join(format!("{}.bvfile", first.id)).exists());
+        // Simulate conflicting authenticated parent envelope sharing the ID.
+        let other = fs::read(root.join(format!("{}.bvfile", second.id))).unwrap();
+        let (_, plaintext) = crate::file_crypto::open(
+            &parent.id,
+            &second.id,
+            &store.active.lock().unwrap().as_ref().unwrap().master_key,
+            &other,
+        )
+        .unwrap();
+        let conflict = crate::file_crypto::seal(
+            &parent.id,
+            &first.id,
+            &store.active.lock().unwrap().as_ref().unwrap().master_key,
+            "one.txt",
+            &plaintext,
+        )
+        .unwrap();
+        fs::write(root.join(format!("{}.bvfile", first.id)), &conflict).unwrap();
+        assert_eq!(
+            store
+                .unlock_nested_vault(&nested.id, "0427".into())
+                .unwrap_err()
+                .code,
+            "recovery_conflict"
+        );
+        assert!(root.join(format!("{}.bvfile", first.id)).exists());
+        assert_eq!(store.read_text_file(&first.id).unwrap(), "Second");
+    }
+
+    #[test]
+    fn interrupted_nested_to_parent_transfer_can_resume() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let parent = store.create("Parent".into(), PASSWORD.into()).unwrap();
+        let first = store.create_text_file("one.txt", "First").unwrap();
+        let root = dir
+            .path()
+            .join("vaults")
+            .join(format!("{}.files", parent.id));
+        let duplicate = fs::read(root.join(format!("{}.bvfile", first.id))).unwrap();
+        let nested = store
+            .lock_selected_files("Nested".into(), "0427".into(), vec![first.id.clone()])
+            .unwrap();
+        fs::write(root.join(format!("{}.bvfile", first.id)), &duplicate).unwrap();
+        let remaining = store
+            .manage_nested_file(
+                &nested.id,
+                "0427".into(),
+                &first.id,
+                "transfer_to_parent",
+                None,
+                None,
+            )
+            .unwrap();
+        assert!(remaining.is_empty());
+        assert_eq!(store.read_text_file(&first.id).unwrap(), "First");
+        assert!(
+            store
+                .unlock_nested_vault(&nested.id, "0427".into())
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn parent_to_existing_nested_transfer_preserves_authenticated_ciphertext() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        store.create("Parent".into(), PASSWORD.into()).unwrap();
+        let original = store
+            .create_text_file("original.md", "Already protected")
+            .unwrap();
+        let incoming = store
+            .create_text_file("incoming.txt", "Transfer secret")
+            .unwrap();
+        let nested = store
+            .lock_selected_files(
+                "Compartment".into(),
+                "0427".into(),
+                vec![original.id.clone()],
+            )
+            .unwrap();
+        assert_eq!(
+            store
+                .transfer_parent_file_to_nested(&nested.id, "0000".into(), &incoming.id)
+                .unwrap_err()
+                .code,
+            "invalid_credentials"
+        );
+        assert_eq!(store.list_files().unwrap(), vec![incoming.clone()]);
+        let moved = store
+            .transfer_parent_file_to_nested(&nested.id, "0427".into(), &incoming.id)
+            .unwrap();
+        assert_eq!(moved.len(), 2);
+        assert!(store.list_files().unwrap().is_empty());
+        assert_eq!(
+            store
+                .read_nested_text_file(&nested.id, "0427".into(), &incoming.id)
+                .unwrap(),
+            "Transfer secret"
+        );
+        assert_eq!(
+            store
+                .transfer_parent_file_to_nested(&nested.id, "0427".into(), &incoming.id)
+                .unwrap_err()
+                .code,
+            "duplicate_file"
+        );
+        let returned = store
+            .manage_nested_file(
+                &nested.id,
+                "0427".into(),
+                &incoming.id,
+                "transfer_to_parent",
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(returned.len(), 1);
+        assert_eq!(
+            store.read_text_file(&incoming.id).unwrap(),
+            "Transfer secret"
+        );
+        assert_eq!(
+            store
+                .unlock_nested_vault(&nested.id, "0427".into())
+                .unwrap(),
+            vec![original]
         );
     }
 

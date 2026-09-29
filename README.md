@@ -140,3 +140,8 @@ Parent-vault text documents can now be edited and renamed through the in-memory 
 ### Sprint 08 — Nested file management (in progress)
 
 Protected files are selectable; their metadata appears in the right-hand panel. PIN-authorised text editing/renaming, deletion and individual encrypted transfers to the parent are supported. See [Sprint 08](docs/SPRINT_08_NESTED_FILE_MANAGEMENT.md).
+
+
+### Sprint 09 — Completion guide
+
+[Phase 01: bidirectional individual encrypted file transfers](docs/SPRINT_09_COMPLETION_GUIDE.md) is implemented, pending native GUI acceptance. **Phase 02: Crash recovery and data integrity** now includes authenticated duplicate reconciliation, resumable encrypted transfers and safe nested staging cleanup. Next: Phase 03 — native macOS testing; detailed fault injection remains a release-hardening item.

@@ -33,6 +33,7 @@ export default function App() {
   const [selectedProtectedFile, setSelectedProtectedFile] = useState<string | null>(null);
   const [nestedEditing, setNestedEditing] = useState(false);
   const [nestedDeleteConfirm, setNestedDeleteConfirm] = useState(false);
+  const [parentTransferId, setParentTransferId] = useState('');
   const [lockIds, setLockIds] = useState<string[]>([]);
   const [lockName, setLockName] = useState('');
   const [lockPassword, setLockPassword] = useState('');
@@ -117,6 +118,19 @@ export default function App() {
     finally { setNestedBusy(false); setNestedPassword(''); }
   }
 
+  async function moveParentToNested(event: React.FormEvent) {
+    event.preventDefault();
+    if (!selectedNested || !nestedUnlocked || !parentTransferId || nestedBusy || !/^[0-9]{4}$/.test(nestedPassword)) return;
+    setNestedBusy(true); setNestedError('');
+    try {
+      const updated = await native.transferParentFileToNested(selectedNested, nestedPassword, parentTransferId);
+      setNestedContents(updated); setStoredFiles(await native.listVaultFiles());
+      setParentTransferId(''); setLockIds(previous => previous.filter(id => id !== parentTransferId));
+      setNotice('Encrypted file transferred into the nested vault. No plaintext was exported.');
+    } catch (reason) { setNestedError(errorMessage(reason)); }
+    finally { setNestedPassword(''); setNestedBusy(false); }
+  }
+
   const selectedProtected = nestedContents.find(file => file.id === selectedProtectedFile) ?? null;
 
   function selectProtected(file: VaultFile) {
@@ -154,7 +168,7 @@ export default function App() {
   }
 
   function closeNested() {
-    setNestedUnlocked(false); setNestedContents([]); setNestedPassword(''); setNestedFileName(''); setNestedFileContent(''); setNestedError(''); setSelectedProtectedFile(null); setNestedEditing(false); setNestedDeleteConfirm(false);
+    setNestedUnlocked(false); setNestedContents([]); setNestedPassword(''); setNestedFileName(''); setNestedFileContent(''); setNestedError(''); setSelectedProtectedFile(null); setNestedEditing(false); setNestedDeleteConfirm(false); setParentTransferId('');
   }
 
   async function signOut() {
@@ -296,6 +310,16 @@ export default function App() {
             <p className="mt-2 text-xs text-slate-400">These encrypted envelopes are stored inside this compartment, not alongside parent-vault files.</p>
             <div className="mt-4 space-y-2">{nestedContents.map(file => <button type="button" key={file.id} onClick={() => selectProtected(file)} aria-pressed={selectedProtectedFile === file.id} className={"bv-premium-enter flex w-full items-center gap-3 rounded-lg border p-3 text-left text-xs transition-colors " + (selectedProtectedFile === file.id ? 'border-sky-400/50 bg-sky-400/10 text-sky-100' : 'border-border bg-background hover:border-sky-400/30')}><Lock size={14} className="shrink-0 text-sky-300"/><span className="min-w-0 flex-1 break-all">{file.name}</span><span className="shrink-0 font-mono text-slate-500">{(file.sizeBytes / 1024).toFixed(1)} KiB</span></button>)}</div>
             {nestedContents.length === 0 && <p className="mt-5 text-xs text-slate-500">No files in this compartment yet.</p>}
+            <form onSubmit={event => void moveParentToNested(event)} className="mt-6 space-y-3 border-t border-border pt-5">
+              <h3 className="text-xs font-medium text-sky-300">Move from parent vault</h3>
+              <p className="text-[11px] leading-5 text-slate-500">Select one encrypted parent file. The original is removed only after its protected copy is synchronised here.</p>
+              <select aria-label="Parent file to transfer" value={parentTransferId} onChange={event => setParentTransferId(event.target.value)} disabled={nestedBusy || nestedContents.length >= 5} className="w-full min-w-0 rounded-lg border border-border bg-background p-3 text-xs">
+                <option value="">Select a parent file…</option>
+                {storedFiles.filter(file => !nestedContents.some(child => child.id === file.id)).map(file => <option key={file.id} value={file.id}>{file.name}</option>)}
+              </select>
+              <input aria-label="PIN to move parent file" type="password" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" placeholder="Confirm 4-digit PIN" value={nestedPassword} onChange={event => setNestedPassword(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="w-full rounded-lg border border-border bg-background p-3 text-xs tracking-[0.25em]"/>
+              <Button type="submit" variant="outline" disabled={nestedBusy || nestedContents.length >= 5 || !parentTransferId || !/^[0-9]{4}$/.test(nestedPassword)}>Move encrypted file into vault</Button>
+            </form>
             <p className="mt-5 text-[11px] leading-5 text-slate-500">To restore all files to the parent vault, lock this compartment and use the restore control in My Vault. No plaintext export is required.</p>
           </div>
           <div className="rounded-xl border border-border bg-card p-5">

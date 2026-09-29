@@ -76,3 +76,20 @@ describe('local vault IPC contract', () => {
     ]);
   });
 });
+
+describe('Phase 03 transfer IPC contract', () => {
+  it('sends a selected parent file and PIN to the explicit native command', async () => {
+    vi.stubGlobal('isTauri', true);
+    const nestedId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const fileId = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const result = [{ id: fileId, name: 'private.txt', sizeBytes: 12 }];
+    const handler = vi.fn((command, args) => {
+      expect(command).toBe('transfer_parent_file_to_nested');
+      expect(args).toEqual({ nestedId, password: '0427', fileId });
+      return result;
+    });
+    mockIPC(handler);
+    expect(await native.transferParentFileToNested(nestedId, '0427', fileId)).toEqual(result);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+});

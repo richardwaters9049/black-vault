@@ -1903,6 +1903,84 @@ mod tests {
     }
 
     #[test]
+    fn native_lifecycle_survives_store_restart_and_bidirectional_transfer() {
+        let dir = TempDir::new().unwrap();
+        let initial = store(&dir);
+        let parent = initial
+            .create("Acceptance".into(), PASSWORD.into())
+            .unwrap();
+        let first = initial
+            .create_text_file("first.txt", "Survives restart")
+            .unwrap();
+        let second = initial
+            .create_text_file("second.md", "Second file")
+            .unwrap();
+        let nested = initial
+            .lock_selected_files("Protected".into(), "0427".into(), vec![first.id.clone()])
+            .unwrap();
+        initial.lock().unwrap();
+        drop(initial);
+        let restarted = store(&dir);
+        assert_eq!(
+            restarted
+                .unlock(parent.id.clone(), "wrong password".into())
+                .unwrap_err()
+                .code,
+            "invalid_credentials"
+        );
+        restarted
+            .unlock(parent.id.clone(), PASSWORD.into())
+            .unwrap();
+        assert_eq!(
+            restarted
+                .unlock_nested_vault(&nested.id, "9999".into())
+                .unwrap_err()
+                .code,
+            "invalid_credentials"
+        );
+        assert_eq!(
+            restarted
+                .unlock_nested_vault(&nested.id, "0427".into())
+                .unwrap(),
+            vec![first.clone()]
+        );
+        restarted
+            .transfer_parent_file_to_nested(&nested.id, "0427".into(), &second.id)
+            .unwrap();
+        assert!(restarted.list_files().unwrap().is_empty());
+        restarted.lock().unwrap();
+        drop(restarted);
+        let final_session = store(&dir);
+        final_session.unlock(parent.id, PASSWORD.into()).unwrap();
+        assert_eq!(
+            final_session
+                .read_nested_text_file(&nested.id, "0427".into(), &second.id)
+                .unwrap(),
+            "Second file"
+        );
+        final_session
+            .manage_nested_file(
+                &nested.id,
+                "0427".into(),
+                &first.id,
+                "transfer_to_parent",
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            final_session.read_text_file(&first.id).unwrap(),
+            "Survives restart"
+        );
+        assert_eq!(
+            final_session
+                .unlock_nested_vault(&nested.id, "0427".into())
+                .unwrap(),
+            vec![second]
+        );
+    }
+
+    #[test]
     fn recovery_removes_only_known_regular_staging_files() {
         let dir = TempDir::new().unwrap();
         let store = store(&dir);

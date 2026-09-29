@@ -24,9 +24,18 @@
 
 **Remaining validation:** Native macOS interruption/fault-injection at individual write, fsync, rename and unlink boundaries has not been demonstrated. A process crash may still leave encrypted staging artefacts for parent-file updates, and power-loss guarantees depend on the filesystem and storage hardware. Treat these as release-hardening acceptance items rather than a formal durability proof.
 
-## Phase 03 — Native application testing and security regression (next)
+## Phase 03 — Native application testing and security regression (in progress)
 
-Run the macOS GUI lifecycle manually: lock/unlock, wrong PIN, both transfer directions, restart after transfer, duplicate/conflict handling, and window resizing. Extend controlled fault-injection and negative security coverage before distribution.
+Automated acceptance now exercises a fresh Rust store after process-equivalent drop/reinitialisation: incorrect master password, correct unlock, wrong nested PIN, nested inventory, parent → nested transfer, a second restart, nested text authentication, nested → parent transfer and content integrity. Frontend IPC regression verifies the exact native command and PIN/file-ID arguments.
+
+**Native GUI checklist (must be observed in the running Tauri app; not claimed as completed):**
+- Quit an existing app with Cmd+Q, stop its previous dev process, then run ./start.sh dev.
+- Check split login at narrow and wide window sizes, first-vault creation, wrong password, correct unlock, sign-out and unlock again.
+- Create two harmless test documents; create a nested vault with one. Unlock using an incorrect PIN then the correct PIN. Transfer the second parent file into the nested vault; inspect its metadata and text. Transfer one file back. Confirm inventories on both sides.
+- Restart the application, unlock and verify content. Exercise delete confirmation and five-file limit with disposable test data.
+- Check no plaintext exports, unexpected files, secrets in logs, or uncaught errors; review conflict behaviour using an isolated disposable test directory only.
+
+Detailed controlled process-kill/fsync/unlink fault injection, native accessibility checks and release signing remain outstanding.
 
 ## Later phases
 

@@ -15,6 +15,29 @@ import { errorMessage, native, type DesktopInfo, type VaultSummary, type VaultFi
 export default function App() {
   const [info, setInfo] = useState<DesktopInfo | null>(null);
   const [session, setSession] = useState<VaultSummary | null>(null);
+  const [authExiting, setAuthExiting] = useState(false);
+  const [dashboardEntering, setDashboardEntering] = useState(false);
+  const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (transitionTimer.current) clearTimeout(transitionTimer.current); }, []);
+
+  function enterDashboard(vault: VaultSummary) {
+    // Called only after native authentication succeeds. Keep the authenticated
+    // session in memory and never display the dashboard on an auth failure.
+    if (transitionTimer.current) clearTimeout(transitionTimer.current);
+    if (!window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setSession(vault); return;
+    }
+    setAuthExiting(true);
+    transitionTimer.current = setTimeout(() => {
+      setSession(vault);
+      setAuthExiting(false);
+      setDashboardEntering(true);
+      transitionTimer.current = setTimeout(() => {
+        setDashboardEntering(false);
+        transitionTimer.current = null;
+      }, 800);
+    }, 600);
+  }
   const [booting, setBooting] = useState(true);
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [page, setPage] = useState<'overview' | 'vault' | 'create' | 'nested'>('overview');
@@ -207,9 +230,11 @@ export default function App() {
 
   if (booting) return <SplashScreen />;
   if (!info) return <main className="grid place-items-center p-10"><p role="alert" className="text-sm text-red-300">{error || 'Native desktop unavailable.'}</p></main>;
-  if (!session) return <AuthGate onAuthenticated={setSession} />;
+  if (!session) return <div className={authExiting ? 'bv-auth-exit' : undefined}>
+    <AuthGate onAuthenticated={enterDashboard} />
+  </div>;
 
-  return <div className="grid grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)]">
+  return <div className={'bv-dashboard-shell grid grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)]' + (dashboardEntering ? ' bv-dashboard-enter' : '')}>
     <aside className="flex flex-col border-b border-border bg-[#0b1018] p-5 md:border-r md:border-b-0">
       <div className="flex items-center gap-3 py-2">
         <div className="flex size-10 items-center justify-center rounded-xl border border-blue-400/25 bg-blue-500/10"><VaultMark /></div>

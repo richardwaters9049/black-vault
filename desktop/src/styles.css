@@ -82,3 +82,102 @@ button:focus-visible, input:focus-visible { outline: 2px solid #60a5fa; outline-
   .bv-page-enter { animation: none !important; }
   button, input { transition: none !important; }
 }
+
+/* Desktop authentication: a quiet, slowly rotating wireframe globe behind the form. */
+.bv-auth {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  background: radial-gradient(ellipse at 50% 52%, #102038 0%, #090f19 52%, #070b12 100%);
+}
+.bv-auth-panel {
+  justify-self: center;
+  align-self: center;
+  width: min(100%, 460px);
+  min-width: 0;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behaviour: contain;
+  padding: clamp(16px, 3.8dvh, 44px) clamp(18px, 3.5vw, 40px);
+  scrollbar-width: thin;
+  scrollbar-color: #334968 transparent;
+}
+.bv-auth-exit { height: 100vh; height: 100dvh; overflow: hidden; }
+
+.bv-auth-ambient {
+  background: radial-gradient(ellipse at 50% 49%, #315b9b22, transparent 53%),
+    radial-gradient(ellipse at 50% 106%, #1d4ed826, transparent 42%);
+}
+.bv-auth-stars {
+  opacity: .56;
+  background-image:
+    radial-gradient(circle, #93c5fd8c .75px, transparent 1.3px),
+    radial-gradient(circle, #60a5fa64 .65px, transparent 1.2px),
+    radial-gradient(circle, #c4b5fd65 .65px, transparent 1.3px);
+  background-size: 137px 163px, 211px 193px, 293px 251px;
+  background-position: 18px 25px, 91px 69px, 145px 110px;
+  mask-image: radial-gradient(ellipse at center, transparent 24%, black 95%);
+}
+.bv-auth-horizon {
+  height: 30%;
+  background: radial-gradient(ellipse at 50% 105%, #2563eb20, transparent 65%),
+    linear-gradient(to top, #03060b80, transparent);
+}
+.bv-auth-panel { box-shadow: 0 30px 110px #000b, inset 0 1px #ffffff08; }
+.bv-auth-panel .bv-mark-large { width: 48px; height: 48px; filter: drop-shadow(0 0 12px #3b82f655); }
+.bv-globe-scene { width: min(92vw, 86dvh, 790px); aspect-ratio: 1; transform: translate(-50%, -50%); opacity: .9; }
+
+.bv-globe-orbit { position: absolute; inset: 17% -4%; border: 1px solid #60a5fa35; border-radius: 50%; transform: rotate(-23deg); box-shadow: 0 0 13px #3b82f60b; }
+.bv-globe-orbit-two { transform: rotate(32deg); border-color: #60a5fa24; }
+.bv-globe-orbit-three { inset: 9% 7%; transform: rotate(71deg); border-style: dashed; border-color: #93c5fd19; }
+.bv-orbit-point { position: absolute; z-index: 1; width: 4px; height: 4px; border-radius: 50%; background: #bfdbfe; box-shadow: 0 0 5px 2px #60a5fa7a, 0 0 19px #3b82f699; }
+.bv-orbit-point-one { left: 10%; top: 31%; }
+.bv-orbit-point-two { right: 9%; top: 57%; width: 3px; height: 3px; }
+.bv-orbit-point-three { left: 33%; bottom: 9%; width: 3px; height: 3px; }
+@media (max-width: 640px) { .bv-globe-scene { width: min(115vw, 86dvh); opacity: .34; } }
+@media (max-height: 690px) {
+  .bv-auth { padding-block: 12px; }
+  .bv-auth-panel { max-height: calc(100dvh - 24px); padding-block: 16px; }
+  .bv-auth-panel > div:first-child { margin-bottom: 16px; }
+  .bv-auth-panel > div:first-child > div:first-child { margin-bottom: 10px; width: 54px; height: 54px; }
+  .bv-auth-panel form { margin-top: 14px; }
+  .bv-auth-panel > p:last-child { margin-top: 14px; padding-top: 12px; }
+}
+@media (max-width: 390px) {
+  .bv-auth { padding-inline: 10px; }
+  .bv-auth-panel { padding-inline: 16px; border-radius: 16px; }
+  .bv-auth-panel > div:first-child { margin-bottom: 18px; }
+  .bv-auth-panel > div:first-child > div:first-child { margin-bottom: 12px; }
+}
+@keyframes bv-auth-panel-enter {
+  from { opacity: 0; transform: translateY(19px) scale(.985); filter: blur(3px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes bv-globe-enter {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.75) rotate(-25deg); filter: blur(9px); }
+  to { opacity: .9; transform: translate(-50%, -50%) scale(1) rotate(0); filter: blur(0); }
+}
+.bv-globe-enter { animation: bv-globe-enter 1.45s cubic-bezier(.18,.8,.2,1) both; }
+.bv-auth-panel-enter { animation: bv-auth-panel-enter .72s .96s cubic-bezier(.22,1,.36,1) both; }
+@media (prefers-reduced-motion: reduce) { .bv-auth-panel-enter, .bv-globe-enter { animation: none; } }
+
+/* Authenticated-only transition: globe and form recede, then the workspace
+   resolves into focus. The auth view stays mounted until native unlock succeeds. */
+@keyframes bv-auth-exit {
+  0% { opacity: 1; transform: scale(1); filter: blur(0); }
+  55% { opacity: .8; transform: scale(1.025); filter: blur(1px); }
+  100% { opacity: 0; transform: scale(1.075); filter: blur(12px); }
+}
+.bv-auth-exit { pointer-events: none; animation: bv-auth-exit .6s cubic-bezier(.5,0,.8,.2) both; }
+@keyframes bv-dashboard-enter {
+  from { opacity: 0; transform: translateY(16px) scale(.987); filter: blur(7px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+.bv-dashboard-enter { animation: bv-dashboard-enter .8s cubic-bezier(.2,.9,.2,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .bv-auth-exit, .bv-dashboard-enter { animation: none; }
+}

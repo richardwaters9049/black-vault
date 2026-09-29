@@ -19,6 +19,7 @@ fn main() {
             "restore_nested_vault",
             "create_nested_text_file",
             "manage_nested_file",
+            "transfer_parent_file_to_nested",
             "read_nested_text_file",
             "create_vault_text_file",
             "read_vault_text_file",

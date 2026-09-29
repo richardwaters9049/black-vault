@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Eye, EyeOff, KeyRound, Plus, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, KeyRound, Plus } from 'lucide-react';
 import VaultMark from './VaultMark';
+import AuthGlobe from './AuthGlobe';
 import { Button } from '@/components/ui/button';
 import { errorMessage, native, type VaultSummary } from '@/lib/native';
 
@@ -54,23 +55,37 @@ export default function AuthGate({ onAuthenticated }: Props) {
     finally { setBusy(false); }
   }
 
-  return <main className="grid place-items-center px-5 py-14">
-    <section className="w-full max-w-md rounded-2xl border border-blue-400/15 bg-[#091522] p-7 shadow-[0_24px_85px_#0008] sm:p-9" aria-labelledby="auth-title">
-      <div className="mb-8 flex items-center gap-3">
-        <div className="grid size-11 place-items-center rounded-xl border border-blue-400/25 bg-blue-400/10"><VaultMark /></div>
-        <div><p className="text-xs font-semibold tracking-[0.16em]">BLACK VAULT</p><p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-slate-500">Local authentication</p></div>
+  return <main className="bv-auth relative isolate grid w-full place-items-center overflow-hidden px-4 py-4 sm:px-6 sm:py-6">
+    <div className="bv-auth-ambient pointer-events-none absolute inset-0" aria-hidden="true" />
+    <div className="bv-auth-stars pointer-events-none absolute inset-0" aria-hidden="true" />
+    <div className="bv-auth-horizon pointer-events-none absolute inset-x-0 bottom-0" aria-hidden="true" />
+    <div className="bv-globe-scene bv-globe-enter pointer-events-none absolute left-1/2 top-1/2" aria-hidden="true">
+      <AuthGlobe />
+      <span className="bv-globe-orbit bv-globe-orbit-one" />
+      <span className="bv-globe-orbit bv-globe-orbit-two" />
+      <span className="bv-globe-orbit bv-globe-orbit-three" />
+      <span className="bv-orbit-point bv-orbit-point-one" />
+      <span className="bv-orbit-point bv-orbit-point-two" />
+      <span className="bv-orbit-point bv-orbit-point-three" />
+    </div>
+    <section className="bv-auth-panel bv-auth-panel-enter relative z-10 rounded-[22px] border border-blue-300/20 bg-[#0c1420]/95 shadow-[0_30px_110px_#000b] backdrop-blur-xl" aria-labelledby="auth-title">
+      <div className="mb-9 flex flex-col items-center text-center">
+        <div className="mb-5 grid size-[70px] place-items-center rounded-2xl border border-blue-400/20 bg-blue-400/[0.045] shadow-[0_0_38px_#2563eb15]">
+          <VaultMark size="large" />
+        </div>
+        <p className="text-[18px] font-semibold tracking-[0.32em] text-slate-100">BLACK <span className="text-sky-400">VAULT</span></p>
+        <p className="mt-2 text-[10px] uppercase tracking-[0.22em] text-slate-500">Your private space, offline.</p>
       </div>
-      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-sky-400">{creating ? 'First-time setup' : 'Welcome back'}</p>
-      <h1 id="auth-title" className="text-2xl font-medium">{creating ? 'Create your first vault' : 'Unlock your workspace'}</h1>
-      <p className="mt-3 text-sm leading-6 text-slate-400">{creating ? 'Choose a name and a strong password. Your encryption key stays on this Mac.' : 'Select a vault and enter its password to access the dashboard.'}</p>
+      <h1 id="auth-title" className="mb-2 text-center text-lg font-medium text-slate-100">{creating ? 'Create your first vault' : 'Unlock your workspace'}</h1>
+      <p className="text-center text-xs leading-5 text-slate-400">{creating ? 'Choose a vault name and a strong password.' : 'Enter your password to continue.'}</p>
       {loading ? <p role="status" className="mt-8 text-sm text-slate-400">Checking local vaults…</p> :
-        <form onSubmit={event => void submit(event)} className="mt-8 space-y-5">
+        <form onSubmit={event => void submit(event)} className="mt-7 space-y-4">
           {creating ? <label className="block text-xs text-slate-400">Vault name
             <input aria-label="Vault name" value={name} onChange={event => setName(event.target.value)} maxLength={80} required disabled={busy}
-              autoComplete="off" placeholder="Development Vault" className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-3 text-sm text-slate-100 outline-none focus:border-sky-400" />
+              autoComplete="off" placeholder="Development Vault" className="mt-2 w-full rounded-xl border border-blue-300/15 bg-[#080e18] px-3 py-3 text-sm text-slate-100 outline-none focus:border-sky-400" />
           </label> : <label className="block text-xs text-slate-400">Local vault
             <select aria-label="Local vault" value={selected} onChange={event => setSelected(event.target.value)} disabled={busy}
-              className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-3 text-sm text-slate-100 outline-none focus:border-sky-400">
+              className="mt-2 w-full rounded-xl border border-blue-300/15 bg-[#080e18] px-3 py-3 text-sm text-slate-100 outline-none focus:border-sky-400">
               {vaults.map(vault => <option key={vault.id} value={vault.id}>{vault.name ?? 'Vault ' + vault.id.slice(0, 8)}</option>)}
             </select>
           </label>}
@@ -79,8 +94,8 @@ export default function AuthGate({ onAuthenticated }: Props) {
             <div className="relative mt-2">
               <input id="auth-vault-password" aria-label="Vault password" type={showPassword ? 'text' : 'password'} value={password} onChange={event => setPassword(event.target.value)}
                 placeholder={creating ? 'Example: DevVault-Only-2026!' : 'Enter your existing vault password'} autoComplete={creating ? 'new-password' : 'current-password'} minLength={creating ? 12 : undefined} required disabled={busy}
-                className="w-full rounded-lg border border-border bg-background px-3 py-3 pr-20 text-sm text-slate-100 outline-none focus:border-sky-400" />
-              {creating && <button type="button" aria-label={showPassword ? 'Hide vault password' : 'Show vault password'} aria-pressed={showPassword} disabled={busy}
+                className="w-full rounded-xl border border-blue-300/15 bg-[#080e18] px-3 py-3 pr-20 text-sm text-slate-100 outline-none focus:border-sky-400" />
+              {<button type="button" aria-label={showPassword ? 'Hide vault password' : 'Show vault password'} aria-pressed={showPassword} disabled={busy}
                 onClick={() => setShowPassword(value => !value)} className="absolute inset-y-0 right-2 flex items-center gap-1.5 px-2 text-xs text-sky-400 hover:text-sky-200">
                 {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}{showPassword ? 'Hide' : 'Show'}
               </button>}
@@ -88,8 +103,8 @@ export default function AuthGate({ onAuthenticated }: Props) {
             {creating && <p className="mt-2 text-[11px] leading-5 text-slate-500">Check what you typed before creating your vault. Hide it when someone can see your screen.</p>}
           </div>
           {error && <p role="alert" className="rounded-lg border border-red-400/20 bg-red-400/5 p-3 text-xs text-red-300">{error}</p>}
-          <Button type="submit" disabled={busy || !password || (!creating && !selected)} className="w-full justify-center">
-            {creating ? <Plus size={15} /> : <KeyRound size={15} />}{busy ? 'Please wait…' : creating ? 'Create and enter vault' : 'Unlock and sign in'}
+          <Button type="submit" disabled={busy || !password || (!creating && !selected)} className="w-full justify-center rounded-xl bg-gradient-to-r from-blue-600 to-sky-500 py-3.5 shadow-[0_6px_28px_#2563eb24] hover:from-blue-500 hover:to-sky-400">
+            {creating ? <Plus size={15} /> : <KeyRound size={15} />}{busy ? 'Please wait…' : creating ? 'Create vault' : 'Unlock vault'}{!busy && <ArrowRight size={15} />}
           </Button>
           {!creating && selected && <div className="border-t border-border pt-4">
             <button type="button" disabled={busy} onClick={() => { setDeleting(value => !value); setConfirmation(''); }} className="text-xs text-red-300 hover:text-red-200">{deleting ? 'Cancel deletion' : 'Forgot password? / Delete vault'}</button>
@@ -102,9 +117,9 @@ export default function AuthGate({ onAuthenticated }: Props) {
             </div>}
           </div>}
           {vaults.length > 0 && <button type="button" disabled={busy} onClick={() => { setCreating(value => !value); setError(''); setPassword(''); setShowPassword(false); }}
-            className="w-full text-center text-xs text-sky-400 hover:text-sky-200">{creating ? 'Unlock an existing vault' : 'Create another vault'}</button>}
+            className="w-full rounded-xl border border-blue-300/15 bg-white/[0.025] py-3 text-center text-xs text-sky-300 hover:border-blue-300/35 hover:text-sky-100">{creating ? 'Unlock an existing vault' : 'Create another vault'}</button>}
         </form>}
-      <p className="mt-8 flex items-start gap-2 border-t border-border pt-5 text-xs leading-5 text-slate-500"><ShieldCheck size={15} className="mt-0.5 shrink-0 text-sky-400" />No online account or password recovery. Losing your vault password means losing access to its encrypted files.</p>
+      <p className="mt-6 border-t border-white/[0.06] pt-5 text-center text-[11px] leading-5 text-slate-500">No password recovery. Keep your credentials somewhere safe.</p>
     </section>
   </main>;
 }

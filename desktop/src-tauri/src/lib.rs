@@ -86,6 +86,7 @@ pub fn run() {
             commands::restore_nested_vault,
             commands::create_nested_text_file,
             commands::manage_nested_file,
+            commands::transfer_parent_file_to_nested,
             commands::read_nested_text_file,
             commands::create_vault_text_file,
             commands::read_vault_text_file,

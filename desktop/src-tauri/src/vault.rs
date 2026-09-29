@@ -24,6 +24,33 @@ const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 12;
 const RECORD_MAX_BYTES: u64 = 8_192;
 
+// Test-only, thread-local deterministic failure points for encrypted transfer and restore
+// commit sequence. Never enabled in production; no secret material is logged.
+#[cfg(test)]
+thread_local! {
+    static TRANSFER_FAILURE: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
+}
+#[cfg(test)]
+fn transfer_checkpoint(stage: &'static str) -> std::io::Result<()> {
+    // Opt-in integration child exits immediately at a real persistence boundary.
+    // Compiled only for tests; the parent verifies the exit and reopens storage.
+    if std::env::var("BV_TEST_EXIT_STAGE").ok().as_deref() == Some(stage) {
+        if let Ok(marker) = std::env::var("BV_TEST_EXIT_MARKER") {
+            std::fs::write(&marker, stage)?;
+            File::open(&marker)?.sync_all()?;
+        }
+        std::process::exit(86);
+    }
+    if TRANSFER_FAILURE.with(|slot| slot.get() == Some(stage)) {
+        return Err(std::io::Error::other("injected transfer interruption"));
+    }
+    Ok(())
+}
+#[cfg(not(test))]
+fn transfer_checkpoint(_stage: &'static str) -> std::io::Result<()> {
+    Ok(())
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct VaultError {
     pub code: &'static str,
@@ -1312,9 +1339,13 @@ impl VaultStore {
         let write_result = (|| -> std::io::Result<()> {
             let mut output = options.open(&temp)?;
             output.write_all(&encoded)?;
+            transfer_checkpoint("before_temp_sync")?;
             output.sync_all()?;
+            transfer_checkpoint("before_rename")?;
             fs::rename(&temp, &path)?;
+            transfer_checkpoint("before_directory_sync")?;
             File::open(&dir)?.sync_all()?;
+            transfer_checkpoint("before_source_unlink")?;
             Ok(())
         })();
         if write_result.is_err() {
@@ -1322,6 +1353,7 @@ impl VaultStore {
             return Err(VaultError::storage());
         }
         fs::remove_file(&source).map_err(|_| VaultError::storage())?;
+        transfer_checkpoint("before_source_directory_sync").map_err(|_| VaultError::storage())?;
         File::open(&dir)
             .map_err(|_| VaultError::storage())?
             .sync_all()
@@ -1448,10 +1480,16 @@ impl VaultStore {
                         ));
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        transfer_checkpoint("nested_to_parent_before_copy")
+                            .map_err(|_| VaultError::storage())?;
                         crate::file_crypto::persist_new(&dir, file_id, &sealed)?;
                     }
                     Err(_) => return Err(VaultError::storage()),
                 }
+            }
+            if action == "transfer_to_parent" {
+                transfer_checkpoint("nested_to_parent_after_copy")
+                    .map_err(|_| VaultError::storage())?;
             }
             payload.files.remove(index);
         }
@@ -1490,7 +1528,13 @@ impl VaultStore {
             let mut output = options.open(&temp)?;
             output.write_all(&encoded)?;
             output.sync_all()?;
+            if action == "transfer_to_parent" {
+                transfer_checkpoint("nested_to_parent_before_rename")?;
+            }
             fs::rename(&temp, &path)?;
+            if action == "transfer_to_parent" {
+                transfer_checkpoint("nested_to_parent_after_rename")?;
+            }
             File::open(&dir)?.sync_all()?;
             Ok(())
         })();
@@ -1643,10 +1687,14 @@ impl VaultStore {
         // An interruption can leave duplicate ciphertext but not lose the only copy.
         for (info, sealed) in &restored {
             if fs::symlink_metadata(dir.join(format!("{}.bvfile", info.id))).is_err() {
+                transfer_checkpoint("restore_before_copy").map_err(|_| VaultError::storage())?;
                 crate::file_crypto::persist_new(&dir, &info.id, sealed)?;
+                transfer_checkpoint("restore_after_copy").map_err(|_| VaultError::storage())?;
             }
         }
+        transfer_checkpoint("restore_before_unlink").map_err(|_| VaultError::storage())?;
         fs::remove_file(path).map_err(|_| VaultError::storage())?;
+        transfer_checkpoint("restore_after_unlink").map_err(|_| VaultError::storage())?;
         File::open(&dir)
             .map_err(|_| VaultError::storage())?
             .sync_all()
@@ -2106,6 +2154,475 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn parent_to_nested_fault_matrix_recovers_without_plaintext_or_lost_files() {
+        // Each case uses a separate disposable store and recreates the store
+        // after the injected interruption, rather than relying on cached state.
+        for stage in [
+            "before_temp_sync",
+            "before_rename",
+            "before_directory_sync",
+            "before_source_unlink",
+            "before_source_directory_sync",
+        ] {
+            let dir = TempDir::new().unwrap();
+            let initial = store(&dir);
+            let parent = initial.create("Parent".into(), PASSWORD.into()).unwrap();
+            let protected = initial
+                .create_text_file("protected.txt", "Existing")
+                .unwrap();
+            let incoming = initial
+                .create_text_file("incoming.txt", "Keep this safe")
+                .unwrap();
+            let nested = initial
+                .lock_selected_files("Nested".into(), "0427".into(), vec![protected.id.clone()])
+                .unwrap();
+            let root = dir
+                .path()
+                .join("vaults")
+                .join(format!("{}.files", parent.id));
+            let source = root.join(format!("{}.bvfile", incoming.id));
+            let original = fs::read(&source).unwrap();
+
+            TRANSFER_FAILURE.with(|slot| slot.set(Some(stage)));
+            let result =
+                initial.transfer_parent_file_to_nested(&nested.id, "0427".into(), &incoming.id);
+            TRANSFER_FAILURE.with(|slot| slot.set(None));
+            assert_eq!(result.unwrap_err().code, "storage_unavailable", "{stage}");
+            initial.lock().unwrap();
+            drop(initial);
+
+            let restarted = store(&dir);
+            restarted
+                .unlock(parent.id.clone(), PASSWORD.into())
+                .unwrap();
+            let nested_files = restarted
+                .unlock_nested_vault(&nested.id, "0427".into())
+                .unwrap();
+            let is_committed = matches!(
+                stage,
+                "before_directory_sync" | "before_source_unlink" | "before_source_directory_sync"
+            );
+            assert_eq!(
+                nested_files.iter().any(|file| file.id == incoming.id),
+                is_committed,
+                "{stage}"
+            );
+            if is_committed {
+                assert!(!source.exists(), "{stage}: duplicate should be reconciled");
+                assert_eq!(
+                    restarted
+                        .read_nested_text_file(&nested.id, "0427".into(), &incoming.id)
+                        .unwrap(),
+                    "Keep this safe",
+                    "{stage}"
+                );
+            } else {
+                assert_eq!(fs::read(&source).unwrap(), original, "{stage}");
+                assert_eq!(
+                    restarted.read_text_file(&incoming.id).unwrap(),
+                    "Keep this safe",
+                    "{stage}"
+                );
+            }
+            assert_eq!(
+                restarted
+                    .read_nested_text_file(&nested.id, "0427".into(), &protected.id)
+                    .unwrap(),
+                "Existing",
+                "{stage}"
+            );
+        }
+    }
+
+    #[test]
+    fn nested_to_parent_fault_matrix_can_resume_after_restart() {
+        for stage in [
+            "nested_to_parent_before_copy",
+            "nested_to_parent_after_copy",
+            "nested_to_parent_before_rename",
+            "nested_to_parent_after_rename",
+        ] {
+            let dir = TempDir::new().unwrap();
+            let initial = store(&dir);
+            let parent = initial.create("Parent".into(), PASSWORD.into()).unwrap();
+            let file = initial
+                .create_text_file("protected.txt", "Retain contents")
+                .unwrap();
+            let nested = initial
+                .lock_selected_files("Nested".into(), "0427".into(), vec![file.id.clone()])
+                .unwrap();
+            TRANSFER_FAILURE.with(|slot| slot.set(Some(stage)));
+            let result = initial.manage_nested_file(
+                &nested.id,
+                "0427".into(),
+                &file.id,
+                "transfer_to_parent",
+                None,
+                None,
+            );
+            TRANSFER_FAILURE.with(|slot| slot.set(None));
+            assert_eq!(result.unwrap_err().code, "storage_unavailable", "{stage}");
+            initial.lock().unwrap();
+            drop(initial);
+            let restarted = store(&dir);
+            restarted.unlock(parent.id, PASSWORD.into()).unwrap();
+            // Copy-first means the protected copy is still available after all
+            // pre-commit interruptions, including an already copied parent.
+            let inventory = restarted
+                .unlock_nested_vault(&nested.id, "0427".into())
+                .unwrap();
+            let committed = stage == "nested_to_parent_after_rename";
+            assert_eq!(
+                inventory.iter().any(|item| item.id == file.id),
+                !committed,
+                "{stage}"
+            );
+            if !committed {
+                let remaining = restarted
+                    .manage_nested_file(
+                        &nested.id,
+                        "0427".into(),
+                        &file.id,
+                        "transfer_to_parent",
+                        None,
+                        None,
+                    )
+                    .unwrap();
+                assert!(remaining.is_empty(), "{stage}");
+            }
+            assert_eq!(
+                restarted.read_text_file(&file.id).unwrap(),
+                "Retain contents",
+                "{stage}"
+            );
+        }
+    }
+
+    #[test]
+    fn restore_fault_matrix_resumes_identical_copies_after_restart() {
+        for stage in [
+            "restore_before_copy",
+            "restore_after_copy",
+            "restore_before_unlink",
+            "restore_after_unlink",
+        ] {
+            let dir = TempDir::new().unwrap();
+            let initial = store(&dir);
+            let parent = initial.create("Parent".into(), PASSWORD.into()).unwrap();
+            let first = initial
+                .create_text_file("one.txt", "First content")
+                .unwrap();
+            let second = initial
+                .create_text_file("two.txt", "Second content")
+                .unwrap();
+            let nested = initial
+                .lock_selected_files(
+                    "Nested".into(),
+                    "0427".into(),
+                    vec![first.id.clone(), second.id.clone()],
+                )
+                .unwrap();
+            TRANSFER_FAILURE.with(|slot| slot.set(Some(stage)));
+            let result = initial.restore_nested_vault(&nested.id, "0427".into());
+            TRANSFER_FAILURE.with(|slot| slot.set(None));
+            assert_eq!(result.unwrap_err().code, "storage_unavailable", "{stage}");
+            initial.lock().unwrap();
+            drop(initial);
+            let restarted = store(&dir);
+            restarted.unlock(parent.id, PASSWORD.into()).unwrap();
+            if stage != "restore_after_unlink" {
+                let restored = restarted
+                    .restore_nested_vault(&nested.id, "0427".into())
+                    .unwrap();
+                assert_eq!(restored.len(), 2, "{stage}");
+            }
+            assert_eq!(
+                restarted.read_text_file(&first.id).unwrap(),
+                "First content",
+                "{stage}"
+            );
+            assert_eq!(
+                restarted.read_text_file(&second.id).unwrap(),
+                "Second content",
+                "{stage}"
+            );
+            assert!(
+                restarted.list_nested_vaults().unwrap().is_empty(),
+                "{stage}"
+            );
+        }
+    }
+
+    #[test]
+    fn interruption_child_worker() {
+        let Ok(root) = std::env::var("BV_TEST_EXIT_ROOT") else {
+            return;
+        };
+        let stage = std::env::var("BV_TEST_EXIT_STAGE").unwrap();
+        let worker = VaultStore::new(PathBuf::from(&root).join("vaults"));
+        let parent = worker.create("Temporary".into(), PASSWORD.into()).unwrap();
+        let first = worker
+            .create_text_file("first.txt", "First survives")
+            .unwrap();
+        let second = worker
+            .create_text_file("second.txt", "Second survives")
+            .unwrap();
+        let nested = worker
+            .lock_selected_files("Nested".into(), "0427".into(), vec![first.id.clone()])
+            .unwrap();
+        let manifest = serde_json::json!({
+            "parent": parent.id, "nested": nested.id,
+            "first": first.id, "second": second.id
+        });
+        let path = PathBuf::from(&root).join("manifest.json");
+        fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        File::open(&path).unwrap().sync_all().unwrap();
+        File::open(&root).unwrap().sync_all().unwrap();
+        if stage.starts_with("nested_to_parent_") {
+            let _ = worker.manage_nested_file(
+                &nested.id,
+                "0427".into(),
+                &first.id,
+                "transfer_to_parent",
+                None,
+                None,
+            );
+        } else if stage.starts_with("restore_") {
+            let _ = worker.restore_nested_vault(&nested.id, "0427".into());
+        } else {
+            let _ = worker.transfer_parent_file_to_nested(&nested.id, "0427".into(), &second.id);
+        }
+        panic!("checkpoint was not reached: {stage}");
+    }
+
+    #[test]
+    fn interrupted_parent_staging_is_preserved_for_manual_review() {
+        let dir = TempDir::new().unwrap();
+        let initial = store(&dir);
+        let parent = initial.create("Temporary".into(), PASSWORD.into()).unwrap();
+        let file = initial
+            .create_text_file("safe.txt", "Canonical content")
+            .unwrap();
+        let root = dir
+            .path()
+            .join("vaults")
+            .join(format!("{}.files", parent.id));
+        let stage = root.join(format!(
+            ".{}.{}.tmp",
+            file.id,
+            crate::file_crypto::random_id()
+        ));
+        let canonical = root.join(format!("{}.bvfile", file.id));
+        let original = fs::read(&canonical).unwrap();
+        fs::write(&stage, &original[..original.len() / 2]).unwrap();
+        initial.lock().unwrap();
+        drop(initial);
+
+        let reopened = store(&dir);
+        reopened.unlock(parent.id.clone(), PASSWORD.into()).unwrap();
+        assert_eq!(
+            reopened.read_text_file(&file.id).unwrap(),
+            "Canonical content"
+        );
+        assert_eq!(fs::read(&canonical).unwrap(), original);
+        assert!(
+            stage.is_file(),
+            "unverified staging must not be deleted automatically"
+        );
+        reopened.lock().unwrap();
+        assert_eq!(
+            reopened
+                .delete_locked(&parent.id, &format!("DELETE {}", parent.id))
+                .unwrap_err()
+                .code,
+            "storage_unavailable",
+            "unknown staging names must prevent destructive vault deletion"
+        );
+        assert!(stage.is_file());
+        assert!(canonical.is_file());
+    }
+
+    #[test]
+    fn restore_conflict_preserves_authenticated_parent_and_nested_copies() {
+        let dir = TempDir::new().unwrap();
+        let initial = store(&dir);
+        let parent = initial.create("Temporary".into(), PASSWORD.into()).unwrap();
+        let first = initial
+            .create_text_file("one.txt", "Nested version")
+            .unwrap();
+        let nested = initial
+            .lock_selected_files("Nested".into(), "0427".into(), vec![first.id.clone()])
+            .unwrap();
+        let root = dir
+            .path()
+            .join("vaults")
+            .join(format!("{}.files", parent.id));
+        let conflicting = crate::file_crypto::seal(
+            &parent.id,
+            &first.id,
+            &initial.active.lock().unwrap().as_ref().unwrap().master_key,
+            "one.txt",
+            b"Different authenticated version",
+        )
+        .unwrap();
+        let parent_copy = root.join(format!("{}.bvfile", first.id));
+        fs::write(&parent_copy, &conflicting).unwrap();
+        let child_copy = root.join(format!("{}.bvlock", nested.id));
+        let child_original = fs::read(&child_copy).unwrap();
+        initial.lock().unwrap();
+        drop(initial);
+
+        let reopened = store(&dir);
+        reopened.unlock(parent.id, PASSWORD.into()).unwrap();
+        assert_eq!(
+            reopened
+                .restore_nested_vault(&nested.id, "0427".into())
+                .unwrap_err()
+                .code,
+            "recovery_conflict"
+        );
+        assert_eq!(fs::read(&parent_copy).unwrap(), conflicting);
+        assert_eq!(fs::read(&child_copy).unwrap(), child_original);
+        assert_eq!(
+            reopened.read_text_file(&first.id).unwrap(),
+            "Different authenticated version"
+        );
+        assert_eq!(
+            reopened
+                .read_nested_text_file(&nested.id, "0427".into(), &first.id)
+                .unwrap(),
+            "Nested version"
+        );
+    }
+
+    #[test]
+    fn subprocess_interruption_recovery_matrix() {
+        for stage in [
+            "before_temp_sync",
+            "before_rename",
+            "before_directory_sync",
+            "before_source_unlink",
+            "before_source_directory_sync",
+            "nested_to_parent_before_copy",
+            "nested_to_parent_after_copy",
+            "nested_to_parent_before_rename",
+            "nested_to_parent_after_rename",
+            "restore_before_copy",
+            "restore_after_copy",
+            "restore_before_unlink",
+            "restore_after_unlink",
+        ] {
+            let dir = TempDir::new().unwrap();
+            let marker = dir.path().join("checkpoint");
+            let child = std::process::Command::new(std::env::current_exe().unwrap())
+                .arg("--exact")
+                .arg("vault::tests::interruption_child_worker")
+                .env("BV_TEST_EXIT_ROOT", dir.path())
+                .env("BV_TEST_EXIT_STAGE", stage)
+                .env("BV_TEST_EXIT_MARKER", &marker)
+                .output()
+                .unwrap();
+            assert_eq!(child.status.code(), Some(86), "{stage}: {:?}", child);
+            assert_eq!(fs::read_to_string(&marker).unwrap(), stage, "{stage}");
+            let manifest: serde_json::Value =
+                serde_json::from_slice(&fs::read(dir.path().join("manifest.json")).unwrap())
+                    .unwrap();
+            let parent = manifest["parent"].as_str().unwrap();
+            let nested = manifest["nested"].as_str().unwrap();
+            let first = manifest["first"].as_str().unwrap();
+            let second = manifest["second"].as_str().unwrap();
+            let restarted = store(&dir);
+            restarted.unlock(parent.into(), PASSWORD.into()).unwrap();
+            if stage.starts_with("nested_to_parent_") {
+                let committed = stage == "nested_to_parent_after_rename";
+                let inventory = restarted
+                    .unlock_nested_vault(nested, "0427".into())
+                    .unwrap();
+                assert_eq!(
+                    inventory.iter().any(|file| file.id == first),
+                    !committed,
+                    "{stage}"
+                );
+                if !committed {
+                    restarted
+                        .manage_nested_file(
+                            nested,
+                            "0427".into(),
+                            first,
+                            "transfer_to_parent",
+                            None,
+                            None,
+                        )
+                        .unwrap();
+                }
+                assert_eq!(
+                    restarted.read_text_file(first).unwrap(),
+                    "First survives",
+                    "{stage}"
+                );
+                assert_eq!(
+                    restarted.read_text_file(second).unwrap(),
+                    "Second survives",
+                    "{stage}"
+                );
+            } else if stage.starts_with("restore_") {
+                if stage != "restore_after_unlink" {
+                    restarted
+                        .restore_nested_vault(nested, "0427".into())
+                        .unwrap();
+                }
+                assert_eq!(
+                    restarted.read_text_file(first).unwrap(),
+                    "First survives",
+                    "{stage}"
+                );
+                assert_eq!(
+                    restarted.read_text_file(second).unwrap(),
+                    "Second survives",
+                    "{stage}"
+                );
+            } else {
+                let inventory = restarted
+                    .unlock_nested_vault(nested, "0427".into())
+                    .unwrap();
+                let committed = matches!(
+                    stage,
+                    "before_directory_sync"
+                        | "before_source_unlink"
+                        | "before_source_directory_sync"
+                );
+                assert_eq!(
+                    inventory.iter().any(|file| file.id == second),
+                    committed,
+                    "{stage}"
+                );
+                if committed {
+                    assert_eq!(
+                        restarted
+                            .read_nested_text_file(nested, "0427".into(), second)
+                            .unwrap(),
+                        "Second survives",
+                        "{stage}"
+                    );
+                } else {
+                    assert_eq!(
+                        restarted.read_text_file(second).unwrap(),
+                        "Second survives",
+                        "{stage}"
+                    );
+                }
+                assert_eq!(
+                    restarted
+                        .read_nested_text_file(nested, "0427".into(), first)
+                        .unwrap(),
+                    "First survives",
+                    "{stage}"
+                );
+            }
+        }
     }
 
     #[test]

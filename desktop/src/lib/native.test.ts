@@ -49,3 +49,30 @@ it('formats empty, small and large file sizes', () => {
   expect(formatFileSize(1024 ** 2)).toBe('1.0 MiB');
   expect(formatFileSize(1024 ** 3)).toBe('1.0 GiB');
 });
+
+describe('local vault IPC contract', () => {
+  it('passes secrets only to explicit creation and unlock commands', async () => {
+    vi.stubGlobal('isTauri', true);
+    const id = '0123456789abcdef0123456789abcdef';
+    const secret = 'long private test password';
+    const summary = { id, name: 'Personal', isLocked: false };
+    const commands: Array<[string, unknown]> = [];
+    mockIPC((command, args) => {
+      commands.push([command, args]);
+      if (command === 'create_vault' || command === 'unlock_vault') return summary;
+      if (command === 'list_vaults') return [{ id, name: null, isLocked: true }];
+      if (command === 'lock_vault') return null;
+      throw new Error('Unexpected command');
+    });
+    expect(await native.createVault('Personal', secret)).toEqual(summary);
+    expect(await native.listVaults()).toEqual([{ id, name: null, isLocked: true }]);
+    expect(await native.unlockVault(id, secret)).toEqual(summary);
+    await native.lockVault();
+    expect(commands).toEqual([
+      ['create_vault', { name: 'Personal', password: secret }],
+      ['list_vaults', {}],
+      ['unlock_vault', { vaultId: id, password: secret }],
+      ['lock_vault', {}],
+    ]);
+  });
+});

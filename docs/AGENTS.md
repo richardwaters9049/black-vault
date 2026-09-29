@@ -1,4 +1,4 @@
-# Black Vault Engineering Rules
+# Black Vault — Engineering and Agent Rules
 
 **Updated:** 29 September 2026. Read `PROJECT_SUMMARY.md` and `DESKTOP_SECURITY_ARCHITECTURE.md` before desktop changes. The active direction is local-first Tauri/Rust desktop; `backend/` and `frontend/` are preserved legacy implementations and compatibility references.
 

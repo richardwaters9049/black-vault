@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, Check, File, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole, ShieldCheck, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import VaultWorkspace from '@/components/VaultWorkspace';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { errorMessage, formatFileSize, native, type DesktopInfo, type SelectedFile } from '@/lib/native';
 
@@ -60,13 +61,15 @@ export default function App() {
         </Card>
         <Card className="gap-3 rounded-xl border border-border ring-0">
           <CardHeader><CardTitle className="flex items-center gap-2 text-xs font-normal text-slate-400"><LockKeyhole size={14} /> Local vault</CardTitle></CardHeader>
-          <CardContent><p className="text-lg">Not configured</p><p className="mt-1 text-xs text-slate-500">Local encryption arrives in Sprint 02</p></CardContent>
+          <CardContent><p className="text-lg">Offline vaults</p><p className="mt-1 text-xs text-slate-500">Create and manage vaults below</p></CardContent>
         </Card>
         <Card className="gap-3 rounded-xl border border-border ring-0">
           <CardHeader><CardTitle className="flex items-center gap-2 text-xs font-normal text-slate-400"><File size={14} /> Current selection</CardTitle></CardHeader>
           <CardContent><p className="text-lg">{file ? '1 file' : 'No file selected'}</p><p className="mt-1 text-xs text-slate-500">{file ? formatFileSize(file.sizeBytes) : 'Choose a file to view its details'}</p></CardContent>
         </Card>
       </div>
+
+      <VaultWorkspace ready={Boolean(info)} />
 
       <section className="mt-8 overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="files-title">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border px-6 py-5">

@@ -16,6 +16,7 @@ beforeEach(async () => {
   fail = false;
   mockIPC(command => {
     if (command === 'get_desktop_info') return { appName: 'Black Vault', version: '0.1.0', platform: 'macos', architecture: 'aarch64' };
+    if (command === 'list_vaults') return [];
     if (command === 'select_file') {
       if (fail) throw { code: 'file_unavailable', message: 'The selected file is unavailable.' };
       return selection;

@@ -415,6 +415,24 @@ pub fn read_vault_text_file(
 }
 
 #[tauri::command]
+pub fn update_vault_text_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    file_id: String,
+    name: String,
+    content: String,
+) -> Result<crate::file_crypto::VaultFile, crate::vault::VaultError> {
+    store.update_text_file(&file_id, &name, &content)
+}
+
+#[tauri::command]
+pub fn delete_vault_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    file_id: String,
+) -> Result<(), crate::vault::VaultError> {
+    store.delete_vault_file(&file_id)
+}
+
+#[tauri::command]
 pub fn decrypt_vault_file(
     store: tauri::State<'_, crate::vault::VaultStore>,
     file_id: String,

@@ -479,6 +479,111 @@ impl VaultStore {
         String::from_utf8(plaintext.to_vec()).map_err(|_| VaultError::file_invalid())
     }
 
+    pub fn update_text_file(
+        &self,
+        file_id: &str,
+        name: &str,
+        content: &str,
+    ) -> Result<crate::file_crypto::VaultFile, VaultError> {
+        if !valid_id(file_id) {
+            return Err(VaultError::file_invalid());
+        }
+        let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+        if !["txt", "md", "json", "csv", "log"].contains(&ext.as_str()) {
+            return Err(VaultError::file_name());
+        }
+        if content.len() as u64 > crate::file_crypto::MAX_FILE_BYTES {
+            return Err(VaultError::file_large());
+        }
+        crate::import_scan::scan(name, content.as_bytes()).map_err(VaultError::scan_blocked)?;
+        let guard = self.lock_active()?;
+        let vault = guard.as_ref().ok_or_else(VaultError::locked)?;
+        let dir = self.active_file_dir(vault)?;
+        let path = dir.join(format!("{file_id}.bvfile"));
+        let existing = crate::file_crypto::read_regular(&path, 8 * 1024 * 1024)?;
+        let (previous, _) =
+            crate::file_crypto::open(&vault.id, file_id, &vault.master_key, &existing)?;
+        if !["txt", "md", "json", "csv", "log"].contains(
+            &previous
+                .name
+                .rsplit('.')
+                .next()
+                .unwrap_or("")
+                .to_ascii_lowercase()
+                .as_str(),
+        ) {
+            return Err(VaultError::file_invalid());
+        }
+        for entry in fs::read_dir(&dir).map_err(|_| VaultError::storage())? {
+            let entry = entry.map_err(|_| VaultError::storage())?;
+            let filename = entry.file_name();
+            let Some(other_id) = filename.to_str().and_then(|v| v.strip_suffix(".bvfile")) else {
+                continue;
+            };
+            if other_id == file_id || !valid_id(other_id) {
+                continue;
+            }
+            let bytes = crate::file_crypto::read_regular(&entry.path(), 8 * 1024 * 1024)?;
+            let (info, _) =
+                crate::file_crypto::open(&vault.id, other_id, &vault.master_key, &bytes)?;
+            if info.name.eq_ignore_ascii_case(name) {
+                return Err(VaultError::new(
+                    "duplicate_filename",
+                    "A file with this name already exists.",
+                ));
+            }
+        }
+        let sealed = crate::file_crypto::seal(
+            &vault.id,
+            file_id,
+            &vault.master_key,
+            name,
+            content.as_bytes(),
+        )?;
+        let temp = dir.join(format!(".{file_id}.update-tmp"));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let result = (|| -> std::io::Result<()> {
+            let mut output = options.open(&temp)?;
+            output.write_all(&sealed)?;
+            output.sync_all()?;
+            fs::rename(&temp, &path)?;
+            File::open(&dir)?.sync_all()?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(temp);
+            return Err(VaultError::storage());
+        }
+        Ok(crate::file_crypto::VaultFile {
+            id: file_id.into(),
+            name: name.into(),
+            size_bytes: content.len() as u64,
+        })
+    }
+
+    pub fn delete_vault_file(&self, file_id: &str) -> Result<(), VaultError> {
+        if !valid_id(file_id) {
+            return Err(VaultError::file_invalid());
+        }
+        let guard = self.lock_active()?;
+        let vault = guard.as_ref().ok_or_else(VaultError::locked)?;
+        let dir = self.active_file_dir(vault)?;
+        let path = dir.join(format!("{file_id}.bvfile"));
+        let sealed = crate::file_crypto::read_regular(&path, 8 * 1024 * 1024)?;
+        crate::file_crypto::open(&vault.id, file_id, &vault.master_key, &sealed)?;
+        fs::remove_file(path).map_err(|_| VaultError::storage())?;
+        File::open(dir)
+            .map_err(|_| VaultError::storage())?
+            .sync_all()
+            .map_err(|_| VaultError::storage())
+    }
+
     pub fn import_example(
         &self,
         example: &str,
@@ -1353,6 +1458,42 @@ mod tests {
             2
         );
         assert_eq!(store.list_files().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn parent_file_management_updates_and_deletes_only_authenticated_envelopes() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        store.create("Managed".into(), PASSWORD.into()).unwrap();
+        let first = store.create_text_file("first.md", "Original").unwrap();
+        let second = store.create_text_file("second.md", "Another").unwrap();
+        assert_eq!(
+            store
+                .update_text_file(&first.id, "second.md", "Collision")
+                .unwrap_err()
+                .code,
+            "duplicate_filename"
+        );
+        assert_eq!(
+            store
+                .update_text_file(&first.id, "unsafe.sh", "No")
+                .unwrap_err()
+                .code,
+            "invalid_filename"
+        );
+        let changed = store
+            .update_text_file(&first.id, "renamed.md", "Updated")
+            .unwrap();
+        assert_eq!(changed.id, first.id);
+        assert_eq!(store.read_text_file(&first.id).unwrap(), "Updated");
+        assert_eq!(store.list_files().unwrap().len(), 2);
+        store.delete_vault_file(&second.id).unwrap();
+        assert_eq!(store.list_files().unwrap(), vec![changed]);
+        store.lock().unwrap();
+        assert_eq!(
+            store.delete_vault_file(&first.id).unwrap_err().code,
+            "vault_locked"
+        );
     }
 
     #[test]

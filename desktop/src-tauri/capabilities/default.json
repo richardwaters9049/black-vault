@@ -25,6 +25,8 @@
     "allow-create-nested-text-file",
     "allow-create-vault-text-file",
     "allow-read-vault-text-file",
+    "allow-update-vault-text-file",
+    "allow-delete-vault-file",
     "allow-decrypt-vault-file",
     "allow-export-vault-file",
     "core:event:allow-listen",

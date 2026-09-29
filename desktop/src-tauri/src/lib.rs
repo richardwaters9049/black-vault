@@ -87,6 +87,8 @@ pub fn run() {
             commands::create_nested_text_file,
             commands::create_vault_text_file,
             commands::read_vault_text_file,
+            commands::update_vault_text_file,
+            commands::delete_vault_file,
             commands::decrypt_vault_file,
             commands::export_vault_file
         ])

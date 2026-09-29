@@ -130,3 +130,8 @@ The sidebar now includes built-in, harmless Example Files to run through the sam
 ### Sprint 06 — Nested vault workspace (29/09/2026)
 
 Nested containers now have a dedicated PIN-gated workspace accessible from **Locked Vaults**. Users can inspect their encrypted file list, create supported text documents directly inside the nested encrypted record, and lock the nested view without locking the parent. Each write requires the PIN again. Restoring all files to the parent remains available. See [Sprint 06](docs/SPRINT_06_NESTED_VAULT_WORKSPACE.md) for current limits, security caveats and manual acceptance steps.
+
+
+### Sprint 07 — File management (in progress)
+
+Parent-vault text documents can now be edited and renamed through the in-memory editor, with authenticated encrypted replacement and no plaintext export. A two-step confirmation deletes an encrypted document. Nested individual-file management and transfer are not yet implemented. See [Sprint 07](docs/SPRINT_07_FILE_MANAGEMENT.md).

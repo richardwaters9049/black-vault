@@ -188,7 +188,7 @@ mod tests {
         )
         .as_bytes();
         assert_eq!(
-            scan("sample.txt", &eicar),
+            scan("sample.txt", eicar),
             Err(ScanFinding::KnownTestSignature)
         );
     }

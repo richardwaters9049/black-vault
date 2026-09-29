@@ -17,7 +17,7 @@ export default function App() {
   const [session, setSession] = useState<VaultSummary | null>(null);
   const [booting, setBooting] = useState(true);
   const [examplesOpen, setExamplesOpen] = useState(false);
-  const [page, setPage] = useState<'overview' | 'vault' | 'create'>('overview');
+  const [page, setPage] = useState<'overview' | 'vault' | 'create' | 'nested'>('overview');
   const [storedFiles, setStoredFiles] = useState<VaultFile[]>([]);
   const [decryptedFiles, setDecryptedFiles] = useState<VaultFile[]>([]);
   const [nestedVaults, setNestedVaults] = useState<NestedVaultSummary[]>([]);
@@ -26,6 +26,10 @@ export default function App() {
   const [nestedContents, setNestedContents] = useState<VaultFile[]>([]);
   const [nestedError, setNestedError] = useState('');
   const [nestedBusy, setNestedBusy] = useState(false);
+  const [nestedUnlocked, setNestedUnlocked] = useState(false);
+  const [nestedFileName, setNestedFileName] = useState('');
+  const [nestedFileType, setNestedFileType] = useState('txt');
+  const [nestedFileContent, setNestedFileContent] = useState('');
   const [lockIds, setLockIds] = useState<string[]>([]);
   const [lockName, setLockName] = useState('');
   const [lockPassword, setLockPassword] = useState('');
@@ -47,7 +51,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) { setNestedVaults([]); setSelectedNested(null); setNestedContents([]); setNestedPassword(''); return; }
+    if (!session) { setNestedVaults([]); setSelectedNested(null); setNestedContents([]); setNestedPassword(''); setNestedUnlocked(false); setNestedFileContent(''); return; }
     let active = true;
     native.listNestedVaults().then(items => { if (active) setNestedVaults(items); })
       .catch(reason => { if (active) setNestedError(errorMessage(reason)); });
@@ -76,7 +80,7 @@ export default function App() {
     try {
       await native.restoreNestedVault(selectedNested, nestedPassword);
       const [files, nested] = await Promise.all([native.listVaultFiles(), native.listNestedVaults()]);
-      setStoredFiles(files); setNestedVaults(nested); setNestedContents([]); setSelectedNested(null);
+      setStoredFiles(files); setNestedVaults(nested); setNestedContents([]); setNestedUnlocked(false); setNestedFileContent(''); setSelectedNested(null);
       setNotice('Nested vault restored into the parent vault as encrypted files.');
     } catch (reason) { setNestedError(errorMessage(reason)); }
     finally { setNestedPassword(''); setNestedBusy(false); }
@@ -85,13 +89,33 @@ export default function App() {
   async function unlockNested(event: React.FormEvent) {
     event.preventDefault();
     if (!selectedNested || nestedBusy || !nestedPassword) return;
-    setNestedBusy(true); setNestedError(''); setNestedContents([]);
+    setNestedBusy(true); setNestedError(''); setNestedContents([]); setNestedUnlocked(false);
     try {
       const contents = await native.unlockNestedVault(selectedNested, nestedPassword);
-      setNestedContents(contents);
+      setNestedContents(contents); setNestedUnlocked(true); setNestedPassword('');
       setNotice('Nested vault authenticated. Its files remain sealed inside the nested vault.');
     } catch (reason) { setNestedError(errorMessage(reason)); }
     finally { setNestedPassword(''); setNestedBusy(false); }
+  }
+
+  async function createNestedFile(event: React.FormEvent) {
+    event.preventDefault();
+    if (!selectedNested || nestedBusy || !nestedUnlocked || !/^[0-9]{4}$/.test(nestedPassword)) return;
+    const name = nestedFileName.trim() + '.' + nestedFileType;
+    if (!nestedFileName.trim() || /[\\/\x00-\x1f]/.test(nestedFileName) || nestedFileName === '.' || nestedFileName === '..') {
+      setNestedError('Enter a valid filename.'); return;
+    }
+    setNestedBusy(true); setNestedError('');
+    try {
+      const files = await native.createNestedTextFile(selectedNested, nestedPassword, name, nestedFileContent);
+      setNestedContents(files); setNestedFileName(''); setNestedFileContent('');
+      setNotice('New file encrypted directly inside the nested vault.');
+    } catch (reason) { setNestedError(errorMessage(reason)); }
+    finally { setNestedBusy(false); setNestedPassword(''); }
+  }
+
+  function closeNested() {
+    setNestedUnlocked(false); setNestedContents([]); setNestedPassword(''); setNestedFileName(''); setNestedFileContent(''); setNestedError('');
   }
 
   async function signOut() {
@@ -100,7 +124,7 @@ export default function App() {
     setBusy(true); setError('');
     try {
       await native.lockVault();
-      setSession(null); setStoredFiles([]); setDecryptedFiles([]); setNestedContents([]); setSelectedNested(null); setLockPassword(''); setNestedPassword(''); setNotice('');
+      setSession(null); setStoredFiles([]); setDecryptedFiles([]); setNestedContents([]); setNestedUnlocked(false); setNestedFileContent(''); setSelectedNested(null); setLockPassword(''); setNestedPassword(''); setNotice('');
     } catch (reason) { setError(errorMessage(reason)); }
     finally { setBusy(false); locking.current = false; }
   }
@@ -138,15 +162,15 @@ export default function App() {
         <div className="flex size-10 items-center justify-center rounded-xl border border-blue-400/25 bg-blue-500/10"><VaultMark /></div>
         <span className="text-xs font-semibold tracking-[0.12em]">BLACK VAULT</span>
       </div>
-      <button type="button" onClick={() => setPage('overview')} aria-current={page === 'overview' ? 'page' : undefined}
+      <button type="button" onClick={() => { closeNested(); setPage('overview'); }} aria-current={page === 'overview' ? 'page' : undefined}
         className={"mt-7 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'overview' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
         <LayoutDashboard size={16} /> Overview
       </button>
-      <button type="button" onClick={() => setPage('vault')} aria-current={page === 'vault' ? 'page' : undefined}
+      <button type="button" onClick={() => { closeNested(); setPage('vault'); }} aria-current={page === 'vault' ? 'page' : undefined}
         className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'vault' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
         <KeyRound size={16} /> My Vault
       </button>
-      <button type="button" onClick={() => setPage('create')} aria-current={page === 'create' ? 'page' : undefined}
+      <button type="button" onClick={() => { closeNested(); setPage('create'); }} aria-current={page === 'create' ? 'page' : undefined}
         className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'create' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
         <FilePlus2 size={16} /> Create Files
       </button>
@@ -167,7 +191,7 @@ export default function App() {
       <section aria-label="Locked Vaults" className="mt-5 border-t border-border pt-4">
         <div className="flex items-center gap-2 px-2 text-[11px] font-medium uppercase tracking-wider text-slate-400"><Lock size={13}/> Locked Vaults <span className="ml-auto font-mono text-[10px]">{nestedVaults.length}</span></div>
         {nestedVaults.length === 0 ? <p className="mt-3 px-2 text-[11px] text-slate-600">No nested vaults yet.</p> : <div className="mt-3 space-y-1">{nestedVaults.map(vault =>
-          <button key={vault.id} type="button" onClick={() => { setPage('vault'); setSelectedNested(vault.id); setNestedContents([]); setNestedPassword(''); setNestedError(''); }}
+          <button key={vault.id} type="button" onClick={() => { setPage('nested'); closeNested(); setSelectedNested(vault.id); }}
             className={"bv-premium-enter flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition-[background-color,color,transform] duration-300 hover:translate-x-0.5 " + (selectedNested === vault.id ? 'bg-blue-500/10 text-sky-300' : 'text-slate-400 hover:bg-white/[0.04] hover:text-sky-300')}>
             <Lock size={13} className="shrink-0"/><span className="min-w-0 truncate">Vault {vault.id.slice(0, 8)}</span>
           </button>)}</div>}
@@ -180,7 +204,7 @@ export default function App() {
 
     <main className="mx-auto w-full max-w-6xl px-6 py-8 sm:px-10 sm:py-10">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-6">
-        <div className="flex items-center gap-2 text-xs text-slate-400"><HardDrive size={14} /> Personal workspace <span className="mx-1 text-slate-700">/</span><span className="text-slate-200">{page === 'overview' ? 'Overview' : page === 'vault' ? 'My Vault' : 'Create Files'}</span></div>
+        <div className="flex items-center gap-2 text-xs text-slate-400"><HardDrive size={14} /> Personal workspace <span className="mx-1 text-slate-700">/</span><span className="text-slate-200">{page === 'overview' ? 'Overview' : page === 'vault' ? 'My Vault' : page === 'nested' ? 'Nested Vault' : 'Create Files'}</span></div>
         <Button variant="outline" disabled={busy} onClick={() => void signOut()}><LockKeyhole size={14} />{busy ? 'Signing out…' : 'Sign out'}</Button>
       </header>
 
@@ -215,6 +239,40 @@ export default function App() {
         <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Write a document and encrypt it directly into your unlocked vault. No external Save dialog or plaintext file is created.</p>
         <VaultFileEditor key={nestedVaults.length} vaultId={session.id} onFilesChange={setStoredFiles}/>
       </div>}
+      {page === 'nested' && selectedNested && <section key={selectedNested} className="bv-page-enter pt-6">
+        <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-sky-400">Compartmentalised workspace</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><h1 className="flex items-center gap-3 text-2xl font-medium tracking-tight sm:text-3xl"><LockKeyhole className="text-sky-300"/> Vault {selectedNested.slice(0, 8)}</h1>
+          <p className="mt-2 text-xs text-slate-400">Encrypted within the parent vault · {nestedUnlocked ? 'Authenticated for this view' : 'PIN required'}</p></div>
+          <Button variant="outline" onClick={() => { closeNested(); setPage('vault'); }}><Lock size={14}/> {nestedUnlocked ? 'Lock nested vault' : 'Back to parent'}</Button>
+        </div>
+        {!nestedUnlocked ? <form onSubmit={event => void unlockNested(event)} className="bv-premium-enter mt-7 max-w-md space-y-4 rounded-xl border border-border bg-card p-6">
+          <p className="text-sm font-medium">Unlock this compartment</p>
+          <p className="text-xs leading-5 text-slate-400">The parent vault must remain unlocked. Enter the separate four-digit PIN to authenticate the nested container.</p>
+          <input aria-label="Unlock nested vault PIN" type="password" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} minLength={4} autoComplete="off" placeholder="••••" value={nestedPassword} onChange={event => setNestedPassword(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="w-full rounded-lg border border-border bg-background p-3 text-center font-mono text-xl tracking-[0.6em] outline-none focus:border-sky-400"/>
+          <Button type="submit" disabled={nestedBusy || !/^[0-9]{4}$/.test(nestedPassword)}>{nestedBusy ? 'Authenticating…' : 'Unlock compartment'}</Button>
+        </form> : <div className="bv-premium-enter mt-7 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h2 className="flex items-center gap-2 text-sm font-medium"><FolderOpen size={16} className="text-sky-300"/> Protected files <span className="ml-auto font-mono text-xs text-slate-500">{nestedContents.length}/5</span></h2>
+            <p className="mt-2 text-xs text-slate-400">These encrypted envelopes are stored inside this compartment, not alongside parent-vault files.</p>
+            <div className="mt-4 space-y-2">{nestedContents.map(file => <div key={file.id} className="bv-premium-enter flex items-center gap-3 rounded-lg border border-border bg-background p-3 text-xs"><Lock size={14} className="shrink-0 text-sky-300"/><span className="min-w-0 flex-1 break-all">{file.name}</span><span className="font-mono text-slate-500">{(file.sizeBytes / 1024).toFixed(1)} KiB</span></div>)}</div>
+            {nestedContents.length === 0 && <p className="mt-5 text-xs text-slate-500">No files in this compartment yet.</p>}
+            <p className="mt-5 text-[11px] leading-5 text-slate-500">To restore all files to the parent vault, lock this compartment and use the restore control in My Vault. No plaintext export is required.</p>
+          </div>
+          <form onSubmit={event => void createNestedFile(event)} className="rounded-xl border border-border bg-card p-5">
+            <h2 className="flex items-center gap-2 text-sm font-medium"><FilePlus2 size={16} className="text-sky-300"/> Create inside this vault</h2>
+            <p className="mt-2 text-xs text-slate-400">The new file is encrypted and added to the nested container. Re-enter your PIN to authorise each write.</p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_90px]">
+              <input aria-label="Nested filename" required maxLength={100} value={nestedFileName} onChange={event => setNestedFileName(event.target.value)} placeholder="Document name" className="min-w-0 rounded-lg border border-border bg-background p-3 text-xs"/>
+              <select aria-label="Nested file type" value={nestedFileType} onChange={event => setNestedFileType(event.target.value)} className="rounded-lg border border-border bg-background p-3 text-xs">{['txt','md','json','csv','log'].map(ext => <option key={ext} value={ext}>.{ext}</option>)}</select>
+            </div>
+            <textarea aria-label="Nested file contents" rows={9} maxLength={5 * 1024 * 1024} value={nestedFileContent} onChange={event => setNestedFileContent(event.target.value)} placeholder="Write your secure document…" className="mt-3 w-full resize-y rounded-lg border border-border bg-[#080f1a] p-3 font-mono text-xs leading-6 outline-none focus:border-sky-400"/>
+            <input aria-label="Confirm nested vault PIN" type="password" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" placeholder="Confirm 4-digit PIN" value={nestedPassword} onChange={event => setNestedPassword(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="mt-3 w-full rounded-lg border border-border bg-background p-3 text-xs tracking-[0.25em]"/>
+            <Button type="submit" className="mt-4" disabled={nestedBusy || nestedContents.length >= 5 || !nestedFileName.trim() || !/^[0-9]{4}$/.test(nestedPassword)}>{nestedBusy ? 'Encrypting…' : 'Encrypt into nested vault'}</Button>
+          </form>
+        </div>}
+        {nestedError && <p role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/5 p-3 text-xs text-red-300">{nestedError}</p>}
+      </section>}
       {page === 'vault' && <div className="bv-page-enter pt-6">
         <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">Local security</p>
         <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">My Vault</h1>
@@ -251,7 +309,7 @@ export default function App() {
             <Button type="submit" disabled={nestedBusy || lockIds.length === 0 || !lockName.trim() || !/^[0-9]{4}$/.test(lockPassword)}><Lock size={14}/>{nestedBusy ? 'Securing files…' : 'Lock selected files'}</Button>
           </form>
         </section>
-        {selectedNested && <section className="bv-premium-enter mt-6 rounded-xl border border-border bg-card p-5 transition-[border-color,box-shadow] duration-300 hover:border-sky-500/20 hover:shadow-[0_12px_40px_#00000018]">
+        {selectedNested && page === 'vault' && <section className="bv-premium-enter mt-6 rounded-xl border border-border bg-card p-5 transition-[border-color,box-shadow] duration-300 hover:border-sky-500/20 hover:shadow-[0_12px_40px_#00000018]">
           <h2 className="flex items-center gap-2 text-sm font-medium"><LockOpen size={15} className="text-sky-300"/> Nested vault {selectedNested.slice(0, 8)}</h2>
           <p className="mt-2 text-xs text-slate-400">Enter your four-digit PIN to inspect the protected file list, or restore its encrypted files to the parent vault. Restoration removes the nested container only after all encrypted files are saved.</p>
           <form onSubmit={event => void unlockNested(event)} className="mt-4 flex flex-wrap gap-3">

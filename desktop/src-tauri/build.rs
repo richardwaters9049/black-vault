@@ -17,6 +17,7 @@ fn main() {
             "lock_selected_files",
             "unlock_nested_vault",
             "restore_nested_vault",
+            "create_nested_text_file",
             "create_vault_text_file",
             "read_vault_text_file",
             "decrypt_vault_file",

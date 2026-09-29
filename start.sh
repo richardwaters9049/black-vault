@@ -480,40 +480,56 @@ restart_stack() {
 }
 
 # ============================================================
-# MAIN
+# NATIVE DESKTOP (the legacy Docker stack remains available)
 # ============================================================
+
+desktop_app="$PROJECT_ROOT/desktop/src-tauri/target/release/bundle/macos/Black Vault.app"
+
+launch_desktop() {
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+        error "The current native bundle targets macOS only."
+        return 1
+    fi
+    if [[ ! -d "$desktop_app" ]]; then
+        error "Native application not built. Run ./start.sh build first."
+        return 1
+    fi
+    open "$desktop_app"
+    success "Black Vault launched"
+}
+
+desktop_npm() {
+    if ! command -v npm >/dev/null 2>&1; then
+        error "Node.js/npm is required for desktop development."
+        return 1
+    fi
+    (cd "$PROJECT_ROOT/desktop" && npm run "$1")
+}
 
 main() {
     case "${1:-start}" in
-        start)
-            start_stack
+        start|black-v-start) launch_desktop ;;
+        dev) desktop_npm desktop:dev ;;
+        build) desktop_npm desktop:build ;;
+        test)
+            desktop_npm typecheck
+            desktop_npm test
+            desktop_npm test:rust
             ;;
-
-        stop)
-            stop_stack
+        legacy-start) start_stack ;;
+        stop) stop_stack ;;
+        restart) restart_stack ;;
+        logs) show_logs ;;
+        help|-h|--help)
+            echo "Black Vault — native desktop"
+            echo "  ./start.sh              Launch the compiled macOS app"
+            echo "  ./start.sh dev          Run the Tauri development app"
+            echo "  ./start.sh build        Build the macOS app bundle"
+            echo "  ./start.sh test         Run TypeScript, frontend and Rust tests"
+            echo "  ./start.sh legacy-start  Start the preserved Docker stack"
+            echo "  ./start.sh stop|restart|logs  Manage the legacy Docker stack"
             ;;
-
-        restart)
-            restart_stack
-            ;;
-
-        logs)
-            show_logs
-            ;;
-
-        *)
-            print_banner
-
-            echo "  ${BOLD}Usage${RESET}"
-            echo ""
-            echo "    ${BRIGHT_CYAN}./start.sh${RESET}          Start Black Vault"
-            echo "    ${BRIGHT_CYAN}./start.sh stop${RESET}     Stop Black Vault"
-            echo "    ${BRIGHT_CYAN}./start.sh restart${RESET}  Restart everything"
-            echo "    ${BRIGHT_CYAN}./start.sh logs${RESET}     View live logs"
-            echo ""
-
-            exit 1
-            ;;
+        *) error "Unknown command: $1"; echo "Run ./start.sh help"; return 2 ;;
     esac
 }
 

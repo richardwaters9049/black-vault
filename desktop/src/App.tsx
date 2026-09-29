@@ -2,11 +2,15 @@ import { useEffect, useState } from 'react';
 import { ArrowUpRight, Check, File, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole, ShieldCheck, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import VaultWorkspace from '@/components/VaultWorkspace';
+import AuthGate from '@/components/AuthGate';
+import SplashScreen from '@/components/SplashScreen';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { errorMessage, formatFileSize, native, type DesktopInfo, type SelectedFile } from '@/lib/native';
+import { errorMessage, formatFileSize, native, type DesktopInfo, type SelectedFile, type VaultSummary } from '@/lib/native';
 
 export default function App() {
   const [info, setInfo] = useState<DesktopInfo | null>(null);
+  const [session, setSession] = useState<VaultSummary | null>(null);
+  const [booting, setBooting] = useState(true);
   const [file, setFile] = useState<SelectedFile | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -14,10 +18,22 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    native.getDesktopInfo().then(value => { if (active) setInfo(value); })
-      .catch(reason => { if (active) setError(errorMessage(reason)); });
+    // Fail closed: a webview reload must not inherit an unlocked Rust vault session.
+    Promise.all([native.lockVault(), native.getDesktopInfo(), new Promise<void>(resolve => setTimeout(resolve, 1100))]).then(([, value]) => {
+      if (active) setInfo(value);
+    }).catch(reason => { if (active) setError(errorMessage(reason)); })
+      .finally(() => { if (active) setBooting(false); });
     return () => { active = false; };
   }, []);
+
+  async function signOut() {
+    setBusy(true); setError('');
+    try {
+      await native.lockVault();
+      setSession(null); setFile(null); setNotice('');
+    } catch (reason) { setError(errorMessage(reason)); }
+    finally { setBusy(false); }
+  }
 
   async function selectFile() {
     setBusy(true); setError(''); setNotice('');
@@ -28,6 +44,10 @@ export default function App() {
     } catch (reason) { setError(errorMessage(reason)); }
     finally { setBusy(false); }
   }
+
+  if (booting) return <SplashScreen />;
+  if (!info) return <main className="grid place-items-center p-10"><p role="alert" className="text-sm text-red-300">{error || 'Native desktop unavailable.'}</p></main>;
+  if (!session) return <AuthGate onAuthenticated={setSession} />;
 
   return <div className="grid grid-cols-1 md:grid-cols-[204px_1fr]">
     <aside className="flex flex-col border-b border-border bg-[#0b1018] p-5 md:border-r md:border-b-0">
@@ -45,7 +65,7 @@ export default function App() {
     <main className="mx-auto w-full max-w-6xl px-6 py-8 sm:px-10 sm:py-10">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-6">
         <div className="flex items-center gap-2 text-xs text-slate-400"><HardDrive size={14} /> Personal workspace <span className="mx-1 text-slate-700">/</span><span className="text-slate-200">Overview</span></div>
-        <span className="rounded-full border border-border px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-slate-400">Desktop preview</span>
+        <Button variant="outline" disabled={busy} onClick={() => void signOut()}><LockKeyhole size={14} />{busy ? 'Signing out…' : 'Sign out'}</Button>
       </header>
 
       <section className="py-9 sm:py-11">
@@ -69,7 +89,7 @@ export default function App() {
         </Card>
       </div>
 
-      <VaultWorkspace ready={Boolean(info)} />
+      <VaultWorkspace ready={Boolean(info)} onLocked={() => { setSession(null); setFile(null); }} />
 
       <section className="mt-8 overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="files-title">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border px-6 py-5">

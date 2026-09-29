@@ -54,3 +54,8 @@ Run the preserved legacy suites separately when touching shared formats: `(cd ba
 4. Manual macOS create/restart/unlock/lock checks, recovery design and security review.
 
 See [Sprint 02](SPRINT_02_VAULT_FOUNDATION.md) for current scope and [desktop security architecture](DESKTOP_SECURITY_ARCHITECTURE.md) for proposals that must not be represented as delivered.
+
+### Sprint 03 desktop UX (29/09/2026)
+- Current branch: `feat/desktop-auth-experience`. Native `./start.sh` launches the compiled macOS app; `dev`, `build`, `test`, `help` are desktop commands; `legacy-start` retains Docker start.
+- React `SplashScreen` and `AuthGate` require vault-password unlock or first-time vault creation before rendering the dashboard. The Rust vault is locked on webview startup and sign-out. Do not treat the React gate as a separate security boundary or claim a multi-user login system.
+- Follow `docs/SPRINT_03_AUTH_EXPERIENCE.md`. Next: manual native acceptance, inactivity/sleep auto-lock, IPC boundary review. After each task update relevant documentation and propose a commit message in `gc "Feat/Desktop: ..."` format; do not commit/push automatically.

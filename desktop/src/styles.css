@@ -20,3 +20,17 @@ body { margin: 0; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 ::selection { background: #274779; }
+
+/* Native startup: the animation is visual only; Rust readiness controls navigation. */
+.vault-splash { background: radial-gradient(ellipse at 50% 43%, #171c34 0%, #090d14 57%); }
+.vault-ring { animation: vault-form 950ms cubic-bezier(.18,.78,.24,1) both; }
+.vault-ring-inner { animation-delay: 120ms; }
+.vault-lock { animation: vault-appear 700ms 420ms both; }
+.vault-reveal { animation: vault-appear 650ms 550ms both; }
+.vault-progress { animation: vault-load 1.1s ease-out both; transform-origin: left; }
+@keyframes vault-form { from { opacity: 0; transform: rotate(0deg) scale(.55); } to { opacity: 1; transform: rotate(45deg) scale(1); } }
+@keyframes vault-appear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes vault-load { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .vault-ring, .vault-lock, .vault-reveal, .vault-progress { animation: none; }
+}

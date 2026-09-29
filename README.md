@@ -110,3 +110,6 @@ The longer-term direction is independently encrypted vault environments, per-fil
 - [Historical project handover](docs/PROJECT_HANDOVER.md)
 
 Development is ongoing. Treat security claims as bounded by implemented behaviour and verified tests, not by planned features.
+
+### Sprint 03 — Native launch and vault sign-in (29/09/2026)
+Run `./start.sh` from the repository root to launch the compiled macOS app (`./start.sh build` first if needed). `./start.sh dev` runs Tauri development; `./start.sh test` runs desktop checks; `./start.sh legacy-start` preserves the previous Docker workflow. On startup, a short animated splash precedes first-vault setup or password-based vault unlock. The dashboard appears only after vault authentication. Sign-out locks the Rust vault and clears the UI session. This is local vault authentication, **not** an online or separate multi-user account. See [Sprint 03](docs/SPRINT_03_AUTH_EXPERIENCE.md).

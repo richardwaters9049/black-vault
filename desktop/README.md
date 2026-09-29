@@ -116,3 +116,6 @@ Selection/cancellation/rejection events go to process diagnostics without filena
 - [Tauri's Vite integration](https://v2.tauri.app/start/frontend/vite/)
 - [Tauri command capabilities](https://v2.tauri.app/security/capabilities/)
 - [Native dialog plugin](https://v2.tauri.app/plugin/dialog/)
+
+### Sprint 03 — Startup and sign-in
+From the repository root use `./start.sh` to open the compiled app, `./start.sh build` to rebuild, `./start.sh dev` for Tauri development, and `./start.sh test` for desktop checks. Startup locks any previously open Rust vault before displaying a geometric splash and the vault-password sign-in screen. First-time setup creates a vault; subsequent launches require its password. Sign-out locks the Rust vault before hiding the dashboard. No separate account or online authentication is implemented. See `../docs/SPRINT_03_AUTH_EXPERIENCE.md` for acceptance and limitations.

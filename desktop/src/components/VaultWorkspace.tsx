@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button';
 import VaultFiles from './VaultFiles';
 import { errorMessage, native, type VaultSummary } from '@/lib/native';
 
-interface Props { ready: boolean }
+interface Props { ready: boolean; onLocked?: () => void }
 
-export default function VaultWorkspace({ ready }: Props) {
+export default function VaultWorkspace({ ready, onLocked }: Props) {
   const [vaults, setVaults] = useState<VaultSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -61,6 +61,7 @@ export default function VaultWorkspace({ ready }: Props) {
     try {
       await native.lockVault();
       await refresh();
+      onLocked?.();
       setNotice('Vault locked. The in-memory master key was released.');
     } catch (reason) { setError(errorMessage(reason)); }
     finally { setBusy(false); }

@@ -8,7 +8,12 @@ fn main() {
             "unlock_vault",
             "lock_vault",
             "import_vault_file",
+            "describe_dropped_file",
+            "import_dropped_file",
+            "import_example_file",
+            "delete_locked_vault",
             "list_vault_files",
+            "decrypt_vault_file",
             "export_vault_file",
         ]),
     ))

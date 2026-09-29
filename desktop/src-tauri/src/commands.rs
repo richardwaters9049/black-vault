@@ -1,10 +1,14 @@
 use serde::Serialize;
-use std::{fs, path::Path, sync::Mutex};
+use std::{fs, path::{Path, PathBuf}, sync::Mutex};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
 #[derive(Default)]
 pub struct PickerState(Mutex<()>);
+
+// Only macOS/Tauri native drag events may populate this state. JS never supplies a path.
+#[derive(Default)]
+pub struct DroppedFileState(pub Mutex<Option<PathBuf>>);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -238,8 +242,43 @@ pub fn unlock_vault(
 #[tauri::command]
 pub fn lock_vault(
     store: tauri::State<'_, crate::vault::VaultStore>,
+    dropped: tauri::State<'_, DroppedFileState>,
 ) -> Result<(), crate::vault::VaultError> {
+    if let Ok(mut pending) = dropped.0.lock() { *pending = None; }
     store.lock()
+}
+
+#[tauri::command]
+pub fn describe_dropped_file(
+    dropped: tauri::State<'_, DroppedFileState>,
+) -> Result<SelectedFile, NativeError> {
+    eprintln!("[vault-drop][rust] describe_dropped_file invoked");
+    let guard = dropped.0.lock().map_err(|_| {
+        eprintln!("[vault-drop][rust][error] pending file mutex poisoned");
+        NativeError::unavailable()
+    })?;
+    let path = guard.as_ref().ok_or_else(|| {
+        eprintln!("[vault-drop][rust][error] no pending native file");
+        NativeError::unavailable()
+    })?;
+    let result = describe_selection(path);
+    match &result {
+        Ok(file) => eprintln!("[vault-drop][rust] metadata accepted size_bytes={} (filename redacted)", file.size_bytes),
+        Err(error) => eprintln!("[vault-drop][rust][error] metadata rejected code={}", error.code),
+    }
+    result
+}
+
+#[tauri::command]
+pub async fn import_dropped_file(
+    app: tauri::AppHandle,
+) -> Result<crate::file_crypto::VaultFile, crate::vault::VaultError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<DroppedFileState>();
+        let path = state.0.lock().map_err(|_| crate::vault::VaultError::storage_error())?
+            .take().ok_or_else(crate::vault::VaultError::file_unavailable)?;
+        app.state::<crate::vault::VaultStore>().import_path(&path)
+    }).await.map_err(|_| crate::vault::VaultError::storage_error())?
 }
 
 #[tauri::command]
@@ -273,10 +312,35 @@ pub async fn import_vault_file(
 }
 
 #[tauri::command]
+pub fn import_example_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    example: String,
+) -> Result<crate::file_crypto::VaultFile, crate::vault::VaultError> {
+    store.import_example(&example)
+}
+
+#[tauri::command]
+pub fn delete_locked_vault(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    vault_id: String,
+    confirmation: String,
+) -> Result<(), crate::vault::VaultError> {
+    store.delete_locked(&vault_id, &confirmation)
+}
+
+#[tauri::command]
 pub fn list_vault_files(
     store: tauri::State<'_, crate::vault::VaultStore>,
 ) -> Result<Vec<crate::file_crypto::VaultFile>, crate::vault::VaultError> {
     store.list_files()
+}
+
+#[tauri::command]
+pub fn decrypt_vault_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    file_id: String,
+) -> Result<crate::file_crypto::VaultFile, crate::vault::VaultError> {
+    store.decrypt_in_vault(&file_id)
 }
 
 #[tauri::command]

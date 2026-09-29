@@ -27,7 +27,12 @@ interface Commands {
   unlock_vault: VaultSummary;
   lock_vault: void;
   import_vault_file: VaultFile | null;
+  describe_dropped_file: SelectedFile;
+  import_dropped_file: VaultFile;
+  import_example_file: VaultFile;
+  delete_locked_vault: void;
   list_vault_files: VaultFile[];
+  decrypt_vault_file: VaultFile;
   export_vault_file: VaultFile | null;
 }
 
@@ -43,12 +48,18 @@ export const native = {
   unlockVault: (vaultId: string, password: string) => call('unlock_vault', { vaultId, password }),
   lockVault: () => call('lock_vault'),
   importVaultFile: () => call('import_vault_file'),
+  describeDroppedFile: () => call('describe_dropped_file'),
+  importDroppedFile: () => call('import_dropped_file'),
+  importExampleFile: (example: string) => call('import_example_file', { example }),
+  deleteLockedVault: (vaultId: string, confirmation: string) => call('delete_locked_vault', { vaultId, confirmation }),
   listVaultFiles: () => call('list_vault_files'),
+  decryptVaultFile: (fileId: string) => call('decrypt_vault_file', { fileId }),
   exportVaultFile: (fileId: string) => call('export_vault_file', { fileId }),
 };
 
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
   if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
     return error.message;
   }

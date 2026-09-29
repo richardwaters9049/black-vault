@@ -16,6 +16,7 @@ export interface VaultSummary {
   name: string | null;
   isLocked: boolean;
 }
+export interface NestedVaultSummary { id: string; fileCount: number }
 export interface VaultFile { id: string; name: string; sizeBytes: number }
 export interface NativeError { code: string; message: string }
 
@@ -32,6 +33,12 @@ interface Commands {
   import_example_file: VaultFile;
   delete_locked_vault: void;
   list_vault_files: VaultFile[];
+  list_nested_vaults: NestedVaultSummary[];
+  lock_selected_files: NestedVaultSummary;
+  unlock_nested_vault: VaultFile[];
+  restore_nested_vault: VaultFile[];
+  create_vault_text_file: VaultFile;
+  read_vault_text_file: string;
   decrypt_vault_file: VaultFile;
   export_vault_file: VaultFile | null;
 }
@@ -53,6 +60,12 @@ export const native = {
   importExampleFile: (example: string) => call('import_example_file', { example }),
   deleteLockedVault: (vaultId: string, confirmation: string) => call('delete_locked_vault', { vaultId, confirmation }),
   listVaultFiles: () => call('list_vault_files'),
+  listNestedVaults: () => call('list_nested_vaults'),
+  lockSelectedFiles: (name: string, password: string, fileIds: string[]) => call('lock_selected_files', { name, password, fileIds }),
+  unlockNestedVault: (nestedId: string, password: string) => call('unlock_nested_vault', { nestedId, password }),
+  restoreNestedVault: (nestedId: string, password: string) => call('restore_nested_vault', { nestedId, password }),
+  createVaultTextFile: (name: string, content: string) => call('create_vault_text_file', { name, content }),
+  readVaultTextFile: (fileId: string) => call('read_vault_text_file', { fileId }),
   decryptVaultFile: (fileId: string) => call('decrypt_vault_file', { fileId }),
   exportVaultFile: (fileId: string) => call('export_vault_file', { fileId }),
 };

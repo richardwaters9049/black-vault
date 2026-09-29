@@ -336,6 +336,51 @@ pub fn list_vault_files(
 }
 
 #[tauri::command]
+pub fn list_nested_vaults(store: tauri::State<'_, crate::vault::VaultStore>)
+    -> Result<Vec<crate::vault::NestedVaultSummary>, crate::vault::VaultError> {
+    store.list_nested_vaults()
+}
+#[tauri::command]
+pub fn lock_selected_files(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    name: String, password: String, file_ids: Vec<String>,
+) -> Result<crate::vault::NestedVaultSummary, crate::vault::VaultError> {
+    store.lock_selected_files(name, password, file_ids)
+}
+#[tauri::command]
+pub fn unlock_nested_vault(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    nested_id: String, password: String,
+) -> Result<Vec<crate::file_crypto::VaultFile>, crate::vault::VaultError> {
+    store.unlock_nested_vault(&nested_id, password)
+}
+
+#[tauri::command]
+pub fn restore_nested_vault(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    nested_id: String, password: String,
+) -> Result<Vec<crate::file_crypto::VaultFile>, crate::vault::VaultError> {
+    store.restore_nested_vault(&nested_id, password)
+}
+
+#[tauri::command]
+pub fn create_vault_text_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    name: String,
+    content: String,
+) -> Result<crate::file_crypto::VaultFile, crate::vault::VaultError> {
+    store.create_text_file(&name, &content)
+}
+
+#[tauri::command]
+pub fn read_vault_text_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    file_id: String,
+) -> Result<String, crate::vault::VaultError> {
+    store.read_text_file(&file_id)
+}
+
+#[tauri::command]
 pub fn decrypt_vault_file(
     store: tauri::State<'_, crate::vault::VaultStore>,
     file_id: String,

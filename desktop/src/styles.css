@@ -58,3 +58,27 @@ button:disabled { cursor: not-allowed; }
 @keyframes bv-operation-sweep { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 @keyframes bv-operation-confirm { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .bv-operation-working, .bv-operation-progress, .bv-operation-confirm { animation: none !important; } }
+
+
+/* Restrained transitions for vault cards, nested vault entries and completed actions. */
+.bv-premium-enter { animation: bv-premium-enter .42s cubic-bezier(.22,1,.36,1) both; }
+@keyframes bv-premium-enter {
+  from { opacity: 0; transform: translateY(9px) scale(.992); filter: blur(2px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bv-premium-enter { animation: none !important; }
+}
+
+
+.bv-page-enter { animation: bv-page-enter .46s cubic-bezier(.22,1,.36,1) both; }
+@keyframes bv-page-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+button:not(:disabled) { transition: background-color .25s ease, border-color .25s ease, color .25s ease, box-shadow .25s ease; }
+button:focus-visible, input:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .bv-page-enter { animation: none !important; }
+  button, input { transition: none !important; }
+}

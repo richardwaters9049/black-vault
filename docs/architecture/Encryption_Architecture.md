@@ -1,6 +1,6 @@
 # Black Vault Encryption Architecture
 
-> **Historical web architecture — updated context 29 September 2026:** This document describes the original Next.js/Axum/PostgreSQL model, not the current desktop implementation plan. For the desktop direction and proposed security model, read [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) and [DESKTOP_SECURITY_ARCHITECTURE.md](DESKTOP_SECURITY_ARCHITECTURE.md). Retain this document for legacy compatibility; do not treat its browser sessions, JWT or PostgreSQL assumptions as desktop requirements.
+> **Historical web architecture — updated context 29 September 2026:** This document describes the original Next.js/Axum/PostgreSQL model, not the current desktop implementation plan. For the desktop direction and proposed security model, read [../project/PROJECT_SUMMARY.md](../project/PROJECT_SUMMARY.md) and [DESKTOP_SECURITY_ARCHITECTURE.md](DESKTOP_SECURITY_ARCHITECTURE.md). Retain this document for legacy compatibility; do not treat its browser sessions, JWT or PostgreSQL assumptions as desktop requirements.
 
 ## Overview
 

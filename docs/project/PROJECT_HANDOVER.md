@@ -1,6 +1,6 @@
 # Black Vault — AI Engineering Handover
 
-> **Desktop migration notice — 29 September 2026:** This long handover is a historical reference for the original Next.js/Rust/Axum/PostgreSQL application. The active direction is an offline-first Tauri 2 desktop app on `feat/desktop-migration`. Read `PROJECT_SUMMARY.md`, `Architecture.md`, `DESKTOP_SECURITY_ARCHITECTURE.md` and `SPRINT_01_DESKTOP_FOUNDATION.md` first. The old backend/frontend and crypto fixtures must be preserved. Do not interpret the legacy API, JWT, browser-key or PostgreSQL instructions below as requirements for the new desktop runtime.
+> **Desktop migration notice — 29 September 2026:** This long handover is a historical reference for the original Next.js/Rust/Axum/PostgreSQL application. The active direction is an offline-first Tauri 2 desktop app on `feat/desktop-migration`. Read [project summary](PROJECT_SUMMARY.md), [desktop architecture](../architecture/Architecture.md), [security design](../architecture/DESKTOP_SECURITY_ARCHITECTURE.md) and [Sprint 01](../sprints/sprint-01/SPRINT_01_DESKTOP_FOUNDATION.md) first. The old backend/frontend and crypto fixtures must be preserved. Do not interpret the legacy API, JWT, browser-key or PostgreSQL instructions below as requirements for the new desktop runtime.
 
 ## 1. Project Overview
 

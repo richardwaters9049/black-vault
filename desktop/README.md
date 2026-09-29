@@ -118,10 +118,10 @@ Selection/cancellation/rejection events go to process diagnostics without filena
 - [Native dialog plugin](https://v2.tauri.app/plugin/dialog/)
 
 ### Sprint 03 — Startup and sign-in
-From the repository root use `./start.sh` to open the compiled app, `./start.sh build` to rebuild, `./start.sh dev` for Tauri development, and `./start.sh test` for desktop checks. Startup locks any previously open Rust vault before displaying a geometric splash and the vault-password sign-in screen. First-time setup creates a vault; subsequent launches require its password. Sign-out locks the Rust vault before hiding the dashboard. No separate account or online authentication is implemented. See `../docs/SPRINT_03_AUTH_EXPERIENCE.md` for acceptance and limitations.
+From the repository root use `./start.sh` to open the compiled app, `./start.sh build` to rebuild, `./start.sh dev` for Tauri development, and `./start.sh test` for desktop checks. Startup locks any previously open Rust vault before displaying a geometric splash and the vault-password sign-in screen. First-time setup creates a vault; subsequent launches require its password. Sign-out locks the Rust vault before hiding the dashboard. No separate account or online authentication is implemented. See `../docs/sprints/sprint-03/SPRINT_03_AUTH_EXPERIENCE.md` for acceptance and limitations.
 
 ### Inactivity lock
-The React desktop session calls Rust `lock_vault` after five minutes without keyboard, pointer, wheel or touch activity. Wall-clock checking detects a delayed interval after sleep/resume, but this is not a native OS sleep listener. First-time setup includes development-only example placeholders, never prefilled credentials. See `../docs/SPRINT_04_AUTO_LOCK.md`.
+The React desktop session calls Rust `lock_vault` after five minutes without keyboard, pointer, wheel or touch activity. Wall-clock checking detects a delayed interval after sleep/resume, but this is not a native OS sleep listener. First-time setup includes development-only example placeholders, never prefilled credentials. See `../docs/sprints/sprint-04/SPRINT_04_AUTO_LOCK.md`.
 
 ### Blue/black identity and password visibility
 `src/components/VaultMark.tsx` is the shared scalable SVG brand mark used by the splash, authentication and sidebar. Splash motion is CSS-based and honours reduced-motion preferences. First-time vault creation includes a masked-by-default Show/Hide password button; toggling it does not persist or change the password. Avoid using the public development example password with real files.
@@ -131,11 +131,11 @@ Splash polish: the large vault mark now completes a perspective Y-axis spin with
 Spin refinement: the splash logo now uses a single fast 0.95-second 2D revolution rather than a slow perspective Y-axis flip and overshoot, preventing the planar SVG from visually disappearing/snapping at the end. The overall startup reveal remains 2.8 seconds; reduced motion is unchanged.
 
 ### Pre-import screening
-`src-tauri/src/import_scan.rs` runs in Rust after the native picker and before encryption/persistence. It blocks selected executable/script/macro/archive formats and known high-risk signatures/patterns. The scan is offline and bounded to 5 MiB. A pass is not antivirus clearance; the source remains unchanged. See `../docs/SPRINT_04_IMPORT_SCREENING.md` for threat model, tests and limitations.
+`src-tauri/src/import_scan.rs` runs in Rust after the native picker and before encryption/persistence. It blocks selected executable/script/macro/archive formats and known high-risk signatures/patterns. The scan is offline and bounded to 5 MiB. A pass is not antivirus clearance; the source remains unchanged. See `../docs/sprints/sprint-04/SPRINT_04_IMPORT_SCREENING.md` for threat model, tests and limitations.
 
-Example Files: four built-in Rust-owned samples accessible below Overview, using the same pre-import scanner and encryption path. Locked vault deletion is available on the sign-in screen with `DELETE <full vault ID>` confirmation; there is no password reset. See `../docs/SPRINT_05_EXAMPLES_VAULT_LIFECYCLE.md`.
+Example Files: four built-in Rust-owned samples accessible below Overview, using the same pre-import scanner and encryption path. Locked vault deletion is available on the sign-in screen with `DELETE <full vault ID>` confirmation; there is no password reset. See `../docs/sprints/sprint-05/SPRINT_05_EXAMPLES_VAULT_LIFECYCLE.md`.
 
 
 ### Nested vault workspace
 
-The sidebar opens each nested container as a separate, PIN-gated view. `create_nested_text_file` authenticates the four-digit PIN in Rust and atomically rewrites the encrypted nested record with a new TXT/MD/JSON/CSV/LOG envelope; it does not export plaintext. The interface clears the nested inventory and drafts when its compartment is locked. See `../docs/SPRINT_06_NESTED_VAULT_WORKSPACE.md` for limitations and acceptance.
+The sidebar opens each nested container as a separate, PIN-gated view. `create_nested_text_file` authenticates the four-digit PIN in Rust and atomically rewrites the encrypted nested record with a new TXT/MD/JSON/CSV/LOG envelope; it does not export plaintext. The interface clears the nested inventory and drafts when its compartment is locked. See `../docs/sprints/sprint-06/SPRINT_06_NESTED_VAULT_WORKSPACE.md` for limitations and acceptance.

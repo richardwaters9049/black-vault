@@ -8,7 +8,7 @@
 
 Black Vault is transitioning from a hosted Rust/Axum/PostgreSQL and Next.js encrypted-file application to a local-first desktop application using Tauri 2, React, Vite, TypeScript and Rust. macOS Apple Silicon is the initial target; Windows and Linux are future distribution targets. The desktop app must not require an account, API server, PostgreSQL, Docker or cloud service to perform its core vault operations.
 
-The existing `backend/` and `frontend/` are preserved as working legacy implementations and cryptographic compatibility references. Do not delete, overwrite or destructively migrate their data. The authoritative desktop design is `DESKTOP_SECURITY_ARCHITECTURE.md`; older `Encryption_Architecture.md` documents the web-era design.
+The existing `backend/` and `frontend/` are preserved as working legacy implementations and cryptographic compatibility references. Do not delete, overwrite or destructively migrate their data. The authoritative desktop design is `../architecture/DESKTOP_SECURITY_ARCHITECTURE.md`; older `../architecture/Encryption_Architecture.md` documents the web-era design.
 
 ## Verified implementation at Sprint 01
 
@@ -39,7 +39,7 @@ Independent keys provide cryptographic compartmentalisation, not Qubes-style ope
 
 ## Immediate work — Sprint 02
 
-First complete the native release-app acceptance check in `SPRINT_01_DESKTOP_FOUNDATION.md`. Then extract/reuse Rust crypto without Axum/PostgreSQL coupling; document and prototype local vault creation, unlock, lock, independent key ownership, ephemeral metadata, encrypted persistence and crash-safe checkpointing. Preserve and run all existing compatibility tests. Obtain an architecture review before committing to a persistent format. Sharing, LAN, online relay and full file encryption are outside the initial prototype.
+First complete the native release-app acceptance check in `../sprints/sprint-01/SPRINT_01_DESKTOP_FOUNDATION.md`. Then extract/reuse Rust crypto without Axum/PostgreSQL coupling; document and prototype local vault creation, unlock, lock, independent key ownership, ephemeral metadata, encrypted persistence and crash-safe checkpointing. Preserve and run all existing compatibility tests. Obtain an architecture review before committing to a persistent format. Sharing, LAN, online relay and full file encryption are outside the initial prototype.
 
 ## Development commands
 
@@ -58,4 +58,4 @@ npm run desktop:build
 
 Legacy regression suites: `(cd backend && cargo test --locked)` and `(cd frontend && npm test)`. Database tests require the original disposable PostgreSQL prerequisites. Never run the opt-in live API test against production.
 
-**Engineering:** UK English; no automatic commit or push; never commit secrets; do not weaken tests or crypto to satisfy a build. See `AGENTS.md`, `DESKTOP_SECURITY_ARCHITECTURE.md` and `SPRINT_01_DESKTOP_FOUNDATION.md`.
+**Engineering:** UK English; no automatic commit or push; never commit secrets; do not weaken tests or crypto to satisfy a build. See `AGENTS.md`, `../architecture/DESKTOP_SECURITY_ARCHITECTURE.md` and `../sprints/sprint-01/SPRINT_01_DESKTOP_FOUNDATION.md`.

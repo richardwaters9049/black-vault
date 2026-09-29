@@ -1,6 +1,6 @@
 # Black Vault — Engineering and Agent Rules
 
-Updated: 29 September 2026. Active work: **offline-first desktop migration**, currently the Sprint 02 vault foundation on `feat/desktop-migration`. Read the root [README](../README.md), [desktop README](../desktop/README.md), [Sprint 02 record](SPRINT_02_VAULT_FOUNDATION.md) and [security design](DESKTOP_SECURITY_ARCHITECTURE.md) before changing security-sensitive code.
+Updated: 29 September 2026. Active work: **offline-first desktop application**. Sprint 10 automated security/recovery work is complete; packaged-app acceptance and public distribution checks remain open. Read the root [README](../README.md), [desktop README](../desktop/README.md), [Sprint 02 record](sprints/sprint-02/SPRINT_02_VAULT_FOUNDATION.md) and [security design](architecture/DESKTOP_SECURITY_ARCHITECTURE.md) before changing security-sensitive code.
 
 ## Scope and source of truth
 
@@ -53,15 +53,15 @@ Run the preserved legacy suites separately when touching shared formats: `(cd ba
 3. Encrypted metadata container and tested in-memory-only SQLite evaluation.
 4. Manual macOS create/restart/unlock/lock checks, recovery design and security review.
 
-See [Sprint 02](SPRINT_02_VAULT_FOUNDATION.md) for current scope and [desktop security architecture](DESKTOP_SECURITY_ARCHITECTURE.md) for proposals that must not be represented as delivered.
+See [Sprint 02](sprints/sprint-02/SPRINT_02_VAULT_FOUNDATION.md) for current scope and [desktop security architecture](architecture/DESKTOP_SECURITY_ARCHITECTURE.md) for proposals that must not be represented as delivered.
 
 ### Sprint 03 desktop UX (29/09/2026)
 - Current branch: `feat/desktop-auth-experience`. Native `./start.sh` launches the compiled macOS app; `dev`, `build`, `test`, `help` are desktop commands; `legacy-start` retains Docker start.
 - React `SplashScreen` and `AuthGate` require vault-password unlock or first-time vault creation before rendering the dashboard. The Rust vault is locked on webview startup and sign-out. Do not treat the React gate as a separate security boundary or claim a multi-user login system.
-- Follow `docs/SPRINT_03_AUTH_EXPERIENCE.md`. Next: manual native acceptance, inactivity/sleep auto-lock, IPC boundary review. After each task update relevant documentation and propose a commit message in `gc "Feat/Desktop: ..."` format; do not commit/push automatically.
+- Follow `docs/sprints/sprint-03/SPRINT_03_AUTH_EXPERIENCE.md`. Next: manual native acceptance, inactivity/sleep auto-lock, IPC boundary review. After each task update relevant documentation and propose a commit message in `gc "Feat/Desktop: ..."` format; do not commit/push automatically.
 
 ### Sprint 04 (29/09/2026)
-Branch `feat/desktop-auto-lock`: first-time vault creation has public example placeholders, not prefilled credentials. React inactivity tracking requests Rust `lock_vault` after five minutes and checks wall-clock expiry after timer delays. Do not claim native sleep interception or per-session IPC tokens. See `docs/SPRINT_04_AUTO_LOCK.md`. Manual native acceptance remains outstanding.
+Branch `feat/desktop-auto-lock`: first-time vault creation has public example placeholders, not prefilled credentials. React inactivity tracking requests Rust `lock_vault` after five minutes and checks wall-clock expiry after timer delays. Do not claim native sleep interception or per-session IPC tokens. See `docs/sprints/sprint-04/SPRINT_04_AUTO_LOCK.md`. Manual native acceptance remains outstanding.
 
 ### Desktop brand polish (29/09/2026)
 Stay on `feat/desktop-auto-lock` for this small UI change. Shared blue/black SVG `VaultMark` is used by splash, sign-in and sidebar; keep animation lightweight and respect reduced motion. Creation-only Show/Hide toggles the password input type without storing credentials. No Rust crypto changes.
@@ -71,6 +71,6 @@ Splash timing refinement: 2.8-second minimum brand reveal; the animated large SV
 Splash refinement: fast .95s smooth planar logo revolution (no Y-axis flip/overshoot), while preserving 2.8s startup reveal and reduced-motion fallback. This supersedes the earlier Y-axis spin description above.
 
 ### Offline pre-import gate (29/09/2026)
-Rust `import_scan::scan` must execute on the exact bounded in-memory bytes before `active_file_dir`, encryption or persistence in `VaultStore::import_path`. A rejection must not write into the vault, execute the source, or change the source file. This is a conservative offline static screen, NOT comprehensive malware detection. See `docs/SPRINT_04_IMPORT_SCREENING.md`. Do not present ordinary SQL statements as malware.
+Rust `import_scan::scan` must execute on the exact bounded in-memory bytes before `active_file_dir`, encryption or persistence in `VaultStore::import_path`. A rejection must not write into the vault, execute the source, or change the source file. This is a conservative offline static screen, NOT comprehensive malware detection. See `docs/sprints/sprint-04/SPRINT_04_IMPORT_SCREENING.md`. Do not present ordinary SQL statements as malware.
 
-Example Files / deletion: sample IDs are strictly enumerated in Rust and use `VaultStore::import_bytes`, including the pre-import gate. `delete_locked` must reject active sessions, wrong confirmation, unknown entries and symlinks. It removes known encrypted files before the header. Do not describe filesystem deletion as secure erasure or forgotten-password deletion as recovery. See `docs/SPRINT_05_EXAMPLES_VAULT_LIFECYCLE.md`.
+Example Files / deletion: sample IDs are strictly enumerated in Rust and use `VaultStore::import_bytes`, including the pre-import gate. `delete_locked` must reject active sessions, wrong confirmation, unknown entries and symlinks. It removes known encrypted files before the header. Do not describe filesystem deletion as secure erasure or forgotten-password deletion as recovery. See `docs/sprints/sprint-05/SPRINT_05_EXAMPLES_VAULT_LIFECYCLE.md`.

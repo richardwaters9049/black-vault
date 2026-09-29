@@ -2,7 +2,7 @@
 
 **Black Vault is an offline-first, security-focused desktop vault for sensitive files.** The active product is a standalone macOS application built with Tauri 2, Rust, React 19, Vite, TypeScript and Tailwind CSS. Cryptographic operations and key material remain in Rust, behind a restricted native-command boundary.
 
-> **Status — 29 September 2026:** Sprint 01 desktop foundation and the Sprint 02 vault lifecycle plus bounded encrypted file-storage slice are implemented. You can create, list, unlock and lock vaults, then import, list and explicitly export encrypted files. File import is currently limited to **5 MiB per file**. This is a development build, not a production-ready vault. See [Sprint 02](docs/SPRINT_02_VAULT_FOUNDATION.md).
+> **Status — 29 September 2026:** Sprint 01 desktop foundation and the Sprint 02 vault lifecycle plus bounded encrypted file-storage slice are implemented. You can create, list, unlock and lock vaults, then import, list and explicitly export encrypted files. File import is currently limited to **5 MiB per file**. This is a development build, not a production-ready vault. See [Sprint 02](docs/sprints/sprint-02/SPRINT_02_VAULT_FOUNDATION.md).
 
 ## Current capabilities
 
@@ -99,49 +99,51 @@ The longer-term direction is independently encrypted vault environments, per-fil
 
 ## Documentation
 
+Browse the [documentation index](docs/README.md) for the organised architecture, project history and sprint folders.
+
 - [Desktop development and commands](desktop/README.md)
-- [Project summary](docs/PROJECT_SUMMARY.md)
-- [Desktop-first architecture](docs/Architecture.md)
-- [Proposed desktop security architecture](docs/DESKTOP_SECURITY_ARCHITECTURE.md)
-- [Sprint 01 — Desktop foundation](docs/SPRINT_01_DESKTOP_FOUNDATION.md)
-- [Sprint 02 — Vault foundation](docs/SPRINT_02_VAULT_FOUNDATION.md)
+- [Project summary](docs/project/PROJECT_SUMMARY.md)
+- [Desktop-first architecture](docs/architecture/Architecture.md)
+- [Proposed desktop security architecture](docs/architecture/DESKTOP_SECURITY_ARCHITECTURE.md)
+- [Sprint 01 — Desktop foundation](docs/sprints/sprint-01/SPRINT_01_DESKTOP_FOUNDATION.md)
+- [Sprint 02 — Vault foundation](docs/sprints/sprint-02/SPRINT_02_VAULT_FOUNDATION.md)
 - [Engineering and agent rules](docs/AGENTS.md)
-- [Historical web-era encryption design](docs/Encryption_Architecture.md)
-- [Historical project handover](docs/PROJECT_HANDOVER.md)
+- [Historical web-era encryption design](docs/architecture/Encryption_Architecture.md)
+- [Historical project handover](docs/project/PROJECT_HANDOVER.md)
 
 Development is ongoing. Treat security claims as bounded by implemented behaviour and verified tests, not by planned features.
 
 ### Sprint 03 — Native launch and vault sign-in (29/09/2026)
-Run `./start.sh` from the repository root to launch the compiled macOS app (`./start.sh build` first if needed). `./start.sh dev` runs Tauri development; `./start.sh test` runs desktop checks; `./start.sh legacy-start` preserves the previous Docker workflow. On startup, a short animated splash precedes first-vault setup or password-based vault unlock. The dashboard appears only after vault authentication. Sign-out locks the Rust vault and clears the UI session. This is local vault authentication, **not** an online or separate multi-user account. See [Sprint 03](docs/SPRINT_03_AUTH_EXPERIENCE.md).
+Run `./start.sh` from the repository root to launch the compiled macOS app (`./start.sh build` first if needed). `./start.sh dev` runs Tauri development; `./start.sh test` runs desktop checks; `./start.sh legacy-start` preserves the previous Docker workflow. On startup, a short animated splash precedes first-vault setup or password-based vault unlock. The dashboard appears only after vault authentication. Sign-out locks the Rust vault and clears the UI session. This is local vault authentication, **not** an online or separate multi-user account. See [Sprint 03](docs/sprints/sprint-03/SPRINT_03_AUTH_EXPERIENCE.md).
 
 ### Sprint 04 — Development placeholders and inactivity lock
-First-time setup shows a **public, example-only** vault name and password as placeholders; do not use the sample password for real files. Authenticated sessions request a Rust vault lock after five minutes of inactivity. See [Sprint 04](docs/SPRINT_04_AUTO_LOCK.md) for limitations and manual checks.
+First-time setup shows a **public, example-only** vault name and password as placeholders; do not use the sample password for real files. Authenticated sessions request a Rust vault lock after five minutes of inactivity. See [Sprint 04](docs/sprints/sprint-04/SPRINT_04_AUTO_LOCK.md) for limitations and manual checks.
 
 ### Desktop brand polish (29/09/2026)
 The native splash, sign-in and sidebar now share a reusable blue-on-black vector Vault Mark (geometric cube/V). The splash draws the mark with subtle orbit motion, a blue progress stroke and a reduced-motion fallback. First-time vault creation has a Show/Hide password control (masked by default); example credentials remain placeholders, never prefilled. No encryption or authentication mechanism changed.
 
 ### Offline import screening (29/09/2026)
-Before any encrypted file is persisted, Rust performs a quick offline static policy screen of the exact selected bytes (maximum 5 MiB). It blocks selected executable/script/macro types, executable signatures, a standard antivirus test string, selected high-risk command patterns, and archives requiring deeper inspection. **Passing is not proof a file is safe or malware-free.** The source is left untouched; SQL is treated as data, not automatically classified as injection. See [import screening](docs/SPRINT_04_IMPORT_SCREENING.md).
+Before any encrypted file is persisted, Rust performs a quick offline static policy screen of the exact selected bytes (maximum 5 MiB). It blocks selected executable/script/macro types, executable signatures, a standard antivirus test string, selected high-risk command patterns, and archives requiring deeper inspection. **Passing is not proof a file is safe or malware-free.** The source is left untouched; SQL is treated as data, not automatically classified as injection. See [import screening](docs/sprints/sprint-04/SPRINT_04_IMPORT_SCREENING.md).
 
 ### Example Files and local vault deletion
-The sidebar now includes built-in, harmless Example Files to run through the same offline scan/import/encryption path (including a deliberately blocked script). A locked vault can be permanently deleted from sign-in using an exact full-ID confirmation. Forgotten passwords cannot be reset or recovered; deletion destroys local encrypted contents rather than restoring access. See [vault lifecycle](docs/SPRINT_05_EXAMPLES_VAULT_LIFECYCLE.md).
+The sidebar now includes built-in, harmless Example Files to run through the same offline scan/import/encryption path (including a deliberately blocked script). A locked vault can be permanently deleted from sign-in using an exact full-ID confirmation. Forgotten passwords cannot be reset or recovered; deletion destroys local encrypted contents rather than restoring access. See [vault lifecycle](docs/sprints/sprint-05/SPRINT_05_EXAMPLES_VAULT_LIFECYCLE.md).
 
 
 ### Sprint 06 — Nested vault workspace (29/09/2026)
 
-Nested containers now have a dedicated PIN-gated workspace accessible from **Locked Vaults**. Users can inspect their encrypted file list, create supported text documents directly inside the nested encrypted record, and lock the nested view without locking the parent. Each write requires the PIN again. Restoring all files to the parent remains available. See [Sprint 06](docs/SPRINT_06_NESTED_VAULT_WORKSPACE.md) for current limits, security caveats and manual acceptance steps.
+Nested containers now have a dedicated PIN-gated workspace accessible from **Locked Vaults**. Users can inspect their encrypted file list, create supported text documents directly inside the nested encrypted record, and lock the nested view without locking the parent. Each write requires the PIN again. Restoring all files to the parent remains available. See [Sprint 06](docs/sprints/sprint-06/SPRINT_06_NESTED_VAULT_WORKSPACE.md) for current limits, security caveats and manual acceptance steps.
 
 
 ### Sprint 07 — File management (in progress)
 
-Parent-vault text documents can now be edited and renamed through the in-memory editor, with authenticated encrypted replacement and no plaintext export. A two-step confirmation deletes an encrypted document. Nested individual-file management and transfer are not yet implemented. See [Sprint 07](docs/SPRINT_07_FILE_MANAGEMENT.md).
+Parent-vault text documents can now be edited and renamed through the in-memory editor, with authenticated encrypted replacement and no plaintext export. A two-step confirmation deletes an encrypted document. Nested individual-file management and transfer are not yet implemented. See [Sprint 07](docs/sprints/sprint-07/SPRINT_07_FILE_MANAGEMENT.md).
 
 
 ### Sprint 08 — Nested file management (in progress)
 
-Protected files are selectable; their metadata appears in the right-hand panel. PIN-authorised text editing/renaming, deletion and individual encrypted transfers to the parent are supported. See [Sprint 08](docs/SPRINT_08_NESTED_FILE_MANAGEMENT.md).
+Protected files are selectable; their metadata appears in the right-hand panel. PIN-authorised text editing/renaming, deletion and individual encrypted transfers to the parent are supported. See [Sprint 08](docs/sprints/sprint-08/SPRINT_08_NESTED_FILE_MANAGEMENT.md).
 
 
 ### Sprint 09 — Completion guide
 
-[Phase 01: bidirectional individual encrypted file transfers](docs/SPRINT_09_COMPLETION_GUIDE.md) is implemented, pending native GUI acceptance. **Phase 02: Crash recovery and data integrity** now includes authenticated duplicate reconciliation, resumable encrypted transfers and safe nested staging cleanup. Next: Phase 03 — native macOS testing; detailed fault injection remains a release-hardening item.
+[Phase 01: bidirectional individual encrypted file transfers](docs/sprints/sprint-09/SPRINT_09_COMPLETION_GUIDE.md) is implemented, pending native GUI acceptance. **Phase 02: Crash recovery and data integrity** now includes authenticated duplicate reconciliation, resumable encrypted transfers and safe nested staging cleanup. Next: Phase 03 — native macOS testing; detailed fault injection remains a release-hardening item.

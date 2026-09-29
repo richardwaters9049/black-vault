@@ -48,7 +48,7 @@ Rust should own decrypted vault keys, file operations and metadata access. Inves
 - `frontend/`: Next.js web client and browser cryptography.
 - `tests/fixtures/crypto-v1.json`: shared interoperability vectors.
 - `Encryption_Architecture.md`: original web-era architecture, not the desktop implementation plan.
-- `28thSept2026_notes.md`: detailed legacy crypto and version 2 file-workflow checkpoint.
+- `../notes/28thSept2026_notes.md`: detailed legacy crypto and version 2 file-workflow checkpoint.
 
 Retain existing encrypted records and version semantics. Do not silently reinterpret or migrate old envelopes. Sharing must use recipient public-key identity and wrapped per-file keys, never the sender's vault master key or password.
 
@@ -61,4 +61,4 @@ Retain existing encrypted records and version semantics. Do not silently reinter
 5. Security Centre, durable audit and integrity verification.
 6. LAN transport, optional encrypted relay and cross-platform release hardening.
 
-For exact implementation versus design status, consult `PROJECT_SUMMARY.md`.
+For exact implementation versus design status, consult `../project/PROJECT_SUMMARY.md`.

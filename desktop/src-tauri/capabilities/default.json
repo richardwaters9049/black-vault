@@ -3,5 +3,5 @@
   "identifier": "main-desktop",
   "description": "Allow the main local window to use local vault lifecycle commands and native file selection.",
   "windows": ["main"],
-  "permissions": ["allow-get-desktop-info", "allow-select-file", "allow-list-vaults", "allow-create-vault", "allow-unlock-vault", "allow-lock-vault"]
+  "permissions": ["allow-get-desktop-info", "allow-select-file", "allow-list-vaults", "allow-create-vault", "allow-unlock-vault", "allow-lock-vault", "allow-import-vault-file", "allow-list-vault-files", "allow-export-vault-file"]
 }

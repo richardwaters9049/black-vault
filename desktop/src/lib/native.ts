@@ -16,6 +16,7 @@ export interface VaultSummary {
   name: string | null;
   isLocked: boolean;
 }
+export interface VaultFile { id: string; name: string; sizeBytes: number }
 export interface NativeError { code: string; message: string }
 
 interface Commands {
@@ -25,6 +26,9 @@ interface Commands {
   create_vault: VaultSummary;
   unlock_vault: VaultSummary;
   lock_vault: void;
+  import_vault_file: VaultFile | null;
+  list_vault_files: VaultFile[];
+  export_vault_file: VaultFile | null;
 }
 
 function call<K extends keyof Commands>(command: K, args?: Record<string, unknown>): Promise<Commands[K]> {
@@ -38,6 +42,9 @@ export const native = {
   createVault: (name: string, password: string) => call('create_vault', { name, password }),
   unlockVault: (vaultId: string, password: string) => call('unlock_vault', { vaultId, password }),
   lockVault: () => call('lock_vault'),
+  importVaultFile: () => call('import_vault_file'),
+  listVaultFiles: () => call('list_vault_files'),
+  exportVaultFile: (fileId: string) => call('export_vault_file', { fileId }),
 };
 
 export function errorMessage(error: unknown): string {

@@ -30,6 +30,39 @@ pub struct VaultError {
     pub message: &'static str,
 }
 impl VaultError {
+    pub(crate) fn picker_busy() -> Self {
+        Self::new("picker_busy", "A native file picker is already open.")
+    }
+    pub(crate) fn storage_error() -> Self {
+        Self::storage()
+    }
+    pub(crate) fn locked() -> Self {
+        Self::new("vault_locked", "Unlock a vault to access files.")
+    }
+    pub(crate) fn file_invalid() -> Self {
+        Self::new(
+            "invalid_encrypted_file",
+            "The encrypted file could not be authenticated.",
+        )
+    }
+    pub(crate) fn file_unavailable() -> Self {
+        Self::new(
+            "file_unavailable",
+            "The selected file is unavailable or is not a regular file.",
+        )
+    }
+    pub(crate) fn file_large() -> Self {
+        Self::new("file_too_large", "Files must not exceed 5 MiB.")
+    }
+    pub(crate) fn file_name() -> Self {
+        Self::new("invalid_filename", "The filename is unsupported.")
+    }
+    pub(crate) fn export_exists() -> Self {
+        Self::new(
+            "export_destination_exists",
+            "Choose a new destination; existing files will not be overwritten.",
+        )
+    }
     fn new(code: &'static str, message: &'static str) -> Self {
         Self { code, message }
     }
@@ -302,6 +335,127 @@ impl VaultStore {
         // Drop zeroises the master key. There is no active session token in JavaScript.
         *guard = None;
         Ok(())
+    }
+
+    fn active_file_dir(&self, vault: &OpenVault) -> Result<PathBuf, VaultError> {
+        let dir = self.root.join(format!("{}.files", vault.id));
+        if dir.exists() {
+            let meta = fs::symlink_metadata(&dir).map_err(|_| VaultError::storage())?;
+            if !meta.file_type().is_dir() {
+                return Err(VaultError::storage());
+            }
+        } else {
+            fs::create_dir(&dir).map_err(|_| VaultError::storage())?;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))
+                .map_err(|_| VaultError::storage())?;
+        }
+        Ok(dir)
+    }
+
+    pub fn import_path(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<crate::file_crypto::VaultFile, VaultError> {
+        let guard = self.lock_active()?;
+        let vault = guard.as_ref().ok_or_else(VaultError::locked)?;
+        let name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(VaultError::file_name)?;
+        let bytes = crate::file_crypto::read_regular(path, crate::file_crypto::MAX_FILE_BYTES)?;
+        let dir = self.active_file_dir(vault)?;
+        let id = loop {
+            let candidate = crate::file_crypto::random_id();
+            if !dir.join(format!("{candidate}.bvfile")).exists()
+                && !dir.join(format!(".{candidate}.tmp")).exists()
+            {
+                break candidate;
+            }
+        };
+        let sealed = crate::file_crypto::seal(&vault.id, &id, &vault.master_key, name, &bytes)?;
+        crate::file_crypto::persist_new(&dir, &id, &sealed)?;
+        Ok(crate::file_crypto::VaultFile {
+            id,
+            name: name.into(),
+            size_bytes: bytes.len() as u64,
+        })
+    }
+
+    pub fn list_files(&self) -> Result<Vec<crate::file_crypto::VaultFile>, VaultError> {
+        let guard = self.lock_active()?;
+        let vault = guard.as_ref().ok_or_else(VaultError::locked)?;
+        let dir = self.root.join(format!("{}.files", vault.id));
+        if !dir.exists() {
+            return Ok(Vec::new());
+        }
+        let meta = fs::symlink_metadata(&dir).map_err(|_| VaultError::storage())?;
+        if !meta.file_type().is_dir() {
+            return Err(VaultError::storage());
+        }
+        let mut files = Vec::new();
+        for entry in fs::read_dir(dir).map_err(|_| VaultError::storage())? {
+            let entry = entry.map_err(|_| VaultError::storage())?;
+            if !entry
+                .file_type()
+                .map_err(|_| VaultError::storage())?
+                .is_file()
+            {
+                continue;
+            }
+            let filename = entry.file_name();
+            let Some(id) = filename
+                .to_str()
+                .and_then(|value| value.strip_suffix(".bvfile"))
+            else {
+                continue;
+            };
+            if !crate::file_crypto::valid_id(id) {
+                continue;
+            }
+            let sealed = crate::file_crypto::read_regular(&entry.path(), 8 * 1024 * 1024)?;
+            let (info, _) = crate::file_crypto::open(&vault.id, id, &vault.master_key, &sealed)?;
+            files.push(info);
+        }
+        files.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(files)
+    }
+
+    pub fn export_path(
+        &self,
+        file_id: &str,
+        destination: &std::path::Path,
+    ) -> Result<crate::file_crypto::VaultFile, VaultError> {
+        let guard = self.lock_active()?;
+        let vault = guard.as_ref().ok_or_else(VaultError::locked)?;
+        let parent = destination
+            .parent()
+            .ok_or_else(VaultError::file_unavailable)?;
+        let canonical_parent =
+            fs::canonicalize(parent).map_err(|_| VaultError::file_unavailable())?;
+        let canonical_root = fs::canonicalize(&self.root).map_err(|_| VaultError::storage())?;
+        if canonical_parent.starts_with(&canonical_root) {
+            return Err(VaultError::file_unavailable());
+        }
+        if !crate::file_crypto::valid_id(file_id) {
+            return Err(VaultError::file_invalid());
+        }
+        let dir = self.root.join(format!("{}.files", vault.id));
+        let meta = fs::symlink_metadata(&dir).map_err(|_| VaultError::storage())?;
+        if !meta.file_type().is_dir() {
+            return Err(VaultError::storage());
+        }
+        let sealed = crate::file_crypto::read_regular(
+            &dir.join(format!("{file_id}.bvfile")),
+            8 * 1024 * 1024,
+        )?;
+        let (info, plaintext) =
+            crate::file_crypto::open(&vault.id, file_id, &vault.master_key, &sealed)?;
+        crate::file_crypto::export_new(destination, &plaintext)?;
+        Ok(info)
     }
 
     fn persist_new(&self, id: &str, bytes: &[u8]) -> Result<(), VaultError> {
@@ -588,6 +742,115 @@ mod tests {
                 fixture["key"].as_str().unwrap()
             );
         }
+    }
+
+    #[test]
+    fn imported_files_survive_restart_and_export_identical_bytes() {
+        let dir = TempDir::new().unwrap();
+        let source = dir.path().join("private-document.txt");
+        let original = b"confidential \0 content and UTF-8 \xF0\x9F\x94\x92";
+        fs::write(&source, original).unwrap();
+        let store = store(&dir);
+        let created = store.create("Personal".into(), PASSWORD.into()).unwrap();
+        let first = store.import_path(&source).unwrap();
+        let second = store.import_path(&source).unwrap();
+        assert_ne!(first.id, second.id);
+        assert_eq!(store.list_files().unwrap().len(), 2);
+        let sealed_path = dir
+            .path()
+            .join("vaults")
+            .join(format!("{}.files", created.id))
+            .join(format!("{}.bvfile", first.id));
+        let sealed = fs::read_to_string(&sealed_path).unwrap();
+        assert!(!sealed.contains("private-document"));
+        assert!(!sealed.contains("confidential"));
+        store.lock().unwrap();
+        assert_eq!(store.list_files().unwrap_err().code, "vault_locked");
+        drop(store);
+        let restarted = VaultStore::new(dir.path().join("vaults"));
+        restarted.unlock(created.id, PASSWORD.into()).unwrap();
+        assert_eq!(restarted.list_files().unwrap().len(), 2);
+        let output = dir.path().join("exported-document.txt");
+        assert_eq!(restarted.export_path(&first.id, &output).unwrap(), first);
+        assert_eq!(fs::read(&output).unwrap(), original);
+        assert_eq!(fs::read(&source).unwrap(), original);
+        assert_eq!(
+            restarted.export_path(&first.id, &output).unwrap_err().code,
+            "export_destination_exists"
+        );
+        assert_eq!(fs::read(output).unwrap(), original);
+    }
+
+    #[test]
+    fn files_are_vault_bound_and_tampering_fails_closed() {
+        let dir = TempDir::new().unwrap();
+        let source = dir.path().join("file.txt");
+        fs::write(&source, b"hidden content").unwrap();
+        let store = store(&dir);
+        let first = store.create("First".into(), PASSWORD.into()).unwrap();
+        let imported = store.import_path(&source).unwrap();
+        let first_dir = dir
+            .path()
+            .join("vaults")
+            .join(format!("{}.files", first.id));
+        let sealed_path = first_dir.join(format!("{}.bvfile", imported.id));
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&sealed_path).unwrap()).unwrap();
+        let original = fs::read(&sealed_path).unwrap();
+        value["content"] = "AAAA".into();
+        fs::write(&sealed_path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(
+            store.list_files().unwrap_err().code,
+            "invalid_encrypted_file"
+        );
+        assert!(
+            store
+                .export_path(&imported.id, &dir.path().join("should-not-exist"))
+                .is_err()
+        );
+        assert!(!dir.path().join("should-not-exist").exists());
+        fs::write(&sealed_path, original).unwrap();
+        store.lock().unwrap();
+        let second = store.create("Second".into(), PASSWORD.into()).unwrap();
+        let second_dir = dir
+            .path()
+            .join("vaults")
+            .join(format!("{}.files", second.id));
+        fs::create_dir(&second_dir).unwrap();
+        fs::copy(
+            &sealed_path,
+            second_dir.join(format!("{}.bvfile", imported.id)),
+        )
+        .unwrap();
+        assert_eq!(
+            store.list_files().unwrap_err().code,
+            "invalid_encrypted_file"
+        );
+    }
+
+    #[test]
+    fn abandoned_encrypted_temporary_file_is_not_listed_or_exported() {
+        let dir = TempDir::new().unwrap();
+        let source = dir.path().join("original.txt");
+        fs::write(&source, b"important").unwrap();
+        let store = store(&dir);
+        let created = store.create("Test".into(), PASSWORD.into()).unwrap();
+        let imported = store.import_path(&source).unwrap();
+        let files_dir = dir
+            .path()
+            .join("vaults")
+            .join(format!("{}.files", created.id));
+        let sealed = fs::read(files_dir.join(format!("{}.bvfile", imported.id))).unwrap();
+        let orphan_id = crate::file_crypto::random_id();
+        fs::write(files_dir.join(format!(".{orphan_id}.tmp")), sealed).unwrap();
+        assert_eq!(store.list_files().unwrap().len(), 1);
+        let target_inside_storage = files_dir.join("plain.txt");
+        assert!(
+            store
+                .export_path(&imported.id, &target_inside_storage)
+                .is_err()
+        );
+        assert!(!target_inside_storage.exists());
     }
 
     #[test]

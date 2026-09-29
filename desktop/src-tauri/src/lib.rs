@@ -25,6 +25,8 @@ pub fn run() {
             commands::unlock_vault,
             commands::lock_vault,
             commands::import_vault_file,
+            commands::import_example_file,
+            commands::delete_locked_vault,
             commands::list_vault_files,
             commands::export_vault_file
         ])

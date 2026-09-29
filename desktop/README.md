@@ -132,3 +132,5 @@ Spin refinement: the splash logo now uses a single fast 0.95-second 2D revolutio
 
 ### Pre-import screening
 `src-tauri/src/import_scan.rs` runs in Rust after the native picker and before encryption/persistence. It blocks selected executable/script/macro/archive formats and known high-risk signatures/patterns. The scan is offline and bounded to 5 MiB. A pass is not antivirus clearance; the source remains unchanged. See `../docs/SPRINT_04_IMPORT_SCREENING.md` for threat model, tests and limitations.
+
+Example Files: four built-in Rust-owned samples accessible below Overview, using the same pre-import scanner and encryption path. Locked vault deletion is available on the sign-in screen with `DELETE <full vault ID>` confirmation; there is no password reset. See `../docs/SPRINT_05_EXAMPLES_VAULT_LIFECYCLE.md`.

@@ -71,7 +71,7 @@ it('shows a startup animation, locks previous state and requires first-time setu
   await ready();
   expect(locks).toBe(1);
   expect(host.textContent).toContain('Create your first vault');
-  expect(host.textContent).not.toContain('Your vault, on your Mac.');
+  expect(host.textContent).not.toContain('Encrypt and decrypt your files.');
 });
 
 it('creates a vault, enters the dashboard and locks it on sign-out', async () => {
@@ -79,11 +79,11 @@ it('creates a vault, enters the dashboard and locks it on sign-out', async () =>
   await input('Vault name', 'Personal');
   await input('Vault password', 'correct horse battery staple');
   await submit();
-  expect(host.textContent).toContain('Your vault, on your Mac.');
+  expect(host.textContent).toContain('Encrypt and decrypt your files.');
   await click('Sign out');
   expect(locks).toBe(2);
   expect(host.textContent).toContain('Unlock your workspace');
-  expect(host.textContent).not.toContain('Your vault, on your Mac.');
+  expect(host.textContent).not.toContain('Encrypt and decrypt your files.');
 });
 
 it('rejects an incorrect password without revealing the dashboard', async () => {
@@ -94,7 +94,7 @@ it('rejects an incorrect password without revealing the dashboard', async () => 
   await submit();
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('Incorrect vault password');
   expect(host.querySelector<HTMLInputElement>('input[aria-label="Vault password"]')?.value).toBe('');
-  expect(host.textContent).not.toContain('Your vault, on your Mac.');
+  expect(host.textContent).not.toContain('Encrypt and decrypt your files.');
 });
 
 it('shows and hides the creation password without changing its value', async () => {

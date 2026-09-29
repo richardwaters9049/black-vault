@@ -72,3 +72,5 @@ Splash refinement: fast .95s smooth planar logo revolution (no Y-axis flip/overs
 
 ### Offline pre-import gate (29/09/2026)
 Rust `import_scan::scan` must execute on the exact bounded in-memory bytes before `active_file_dir`, encryption or persistence in `VaultStore::import_path`. A rejection must not write into the vault, execute the source, or change the source file. This is a conservative offline static screen, NOT comprehensive malware detection. See `docs/SPRINT_04_IMPORT_SCREENING.md`. Do not present ordinary SQL statements as malware.
+
+Example Files / deletion: sample IDs are strictly enumerated in Rust and use `VaultStore::import_bytes`, including the pre-import gate. `delete_locked` must reject active sessions, wrong confirmation, unknown entries and symlinks. It removes known encrypted files before the header. Do not describe filesystem deletion as secure erasure or forgotten-password deletion as recovery. See `docs/SPRINT_05_EXAMPLES_VAULT_LIFECYCLE.md`.

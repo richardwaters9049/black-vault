@@ -15,6 +15,11 @@ export default function AuthGate({ onAuthenticated }: Props) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [confirmation, setConfirmation] = useState('');
+  // Copying text from a rendered instruction can introduce non-breaking spaces.
+  const normalizedConfirmation = confirmation.replace(/[\u00a0\u202f]/g, ' ').trim();
+  const confirmationMatches = normalizedConfirmation === `DELETE ${selected}`;
 
   useEffect(() => {
     let mounted = true;
@@ -34,6 +39,18 @@ export default function AuthGate({ onAuthenticated }: Props) {
       onAuthenticated(vault);
     } catch (reason) { setError(errorMessage(reason)); }
     finally { setPassword(''); setShowPassword(false); setBusy(false); }
+  }
+
+  async function deleteVault() {
+    if (busy || !selected || !confirmationMatches) return;
+    setBusy(true); setError('');
+    try {
+      await native.deleteLockedVault(selected, normalizedConfirmation);
+      const remaining = await native.listVaults();
+      setVaults(remaining); setSelected(remaining[0]?.id ?? ''); setCreating(remaining.length === 0);
+      setDeleting(false); setConfirmation(''); setPassword('');
+    } catch (reason) { setError(errorMessage(reason)); }
+    finally { setBusy(false); }
   }
 
   return <main className="grid place-items-center px-5 py-14">
@@ -73,6 +90,16 @@ export default function AuthGate({ onAuthenticated }: Props) {
           <Button type="submit" disabled={busy || !password || (!creating && !selected)} className="w-full justify-center">
             {creating ? <Plus size={15} /> : <KeyRound size={15} />}{busy ? 'Please wait…' : creating ? 'Create and enter vault' : 'Unlock and sign in'}
           </Button>
+          {!creating && selected && <div className="border-t border-border pt-4">
+            <button type="button" disabled={busy} onClick={() => { setDeleting(value => !value); setConfirmation(''); }} className="text-xs text-red-300 hover:text-red-200">{deleting ? 'Cancel deletion' : 'Forgot password? / Delete vault'}</button>
+            {deleting && <div className="mt-3 space-y-3 rounded-lg border border-red-400/25 bg-red-500/5 p-4">
+              <p className="text-xs leading-5 text-red-200">No password recovery or reset exists. Deleting this vault permanently removes its local encrypted files and header. Backups or synced copies may remain elsewhere. This is not secure SSD erasure.</p>
+              <label htmlFor="delete-vault-confirmation" className="block break-all font-mono text-[11px] text-slate-400">Type DELETE {selected} into the field below to confirm.</label>
+              <input id="delete-vault-confirmation" type="text" aria-label="Delete vault confirmation" placeholder={`DELETE ${selected}`} spellCheck={false} autoCapitalize="off" autoCorrect="off" autoComplete="off" value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={busy} className="w-full rounded-lg border border-red-400/30 bg-background p-3 font-mono text-xs outline-none" />
+              <p role="status" className={`text-[11px] ${confirmationMatches ? "text-emerald-300" : "text-slate-400"}`}>{confirmationMatches ? "Confirmation matched. You can now delete this vault." : "The delete button unlocks only when the full confirmation matches."}</p>
+              <Button type="button" variant="outline" disabled={busy || !confirmationMatches} onClick={() => void deleteVault()}>Permanently delete selected vault</Button>
+            </div>}
+          </div>}
           {vaults.length > 0 && <button type="button" disabled={busy} onClick={() => { setCreating(value => !value); setError(''); setPassword(''); setShowPassword(false); }}
             className="w-full text-center text-xs text-sky-400 hover:text-sky-200">{creating ? 'Unlock an existing vault' : 'Create another vault'}</button>}
         </form>}

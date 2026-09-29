@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { KeyRound, Lock, LockOpen, Plus, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import VaultFiles from './VaultFiles';
 import { errorMessage, native, type VaultSummary } from '@/lib/native';
 
 interface Props { ready: boolean; onLocked?: () => void }
@@ -83,7 +82,7 @@ export default function VaultWorkspace({ ready, onLocked }: Props) {
           <p className="mt-2 font-mono text-[11px] text-slate-500">Vault ID: {active.id}</p>
           <p className="mt-4 max-w-sm text-xs leading-6 text-slate-400">The vault master key is held only by Rust for this session. Lock before opening another vault.</p>
           <Button className="mt-5" variant="outline" onClick={() => void lock()} disabled={busy}><Lock size={15} />{busy ? 'Locking…' : 'Lock vault'}</Button>
-          <VaultFiles vaultId={active.id} />
+
         </> : <>
           <h3 className="flex items-center gap-2 text-sm font-medium"><Plus size={16} /> Create a local vault</h3>
           <p className="mt-2 max-w-md text-xs leading-6 text-slate-400">Each vault receives a fresh random 256-bit master key, wrapped using Argon2id and AES-256-GCM. Its display name is encrypted too.</p>

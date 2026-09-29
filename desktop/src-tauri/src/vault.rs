@@ -363,15 +363,40 @@ impl VaultStore {
         &self,
         path: &std::path::Path,
     ) -> Result<crate::file_crypto::VaultFile, VaultError> {
-        let guard = self.lock_active()?;
-        let vault = guard.as_ref().ok_or_else(VaultError::locked)?;
         let name = path
             .file_name()
             .and_then(|value| value.to_str())
             .ok_or_else(VaultError::file_name)?;
         let bytes = crate::file_crypto::read_regular(path, crate::file_crypto::MAX_FILE_BYTES)?;
-        // Scan the exact bounded bytes that will be encrypted, before any vault write.
-        crate::import_scan::scan(name, &bytes).map_err(VaultError::scan_blocked)?;
+        self.import_bytes(name, &bytes)
+    }
+
+    pub fn import_example(
+        &self,
+        example: &str,
+    ) -> Result<crate::file_crypto::VaultFile, VaultError> {
+        let (name, content): (&str, &[u8]) = match example {
+            "notes" => ("example-notes.txt", b"Black Vault example notes.\nThese are harmless, local sample bytes.\n"),
+            "csv" => ("example-records.csv", b"id,label,status\n1,Alpha,active\n2,Beta,pending\n"),
+            "sql" => ("example-query.sql", b"-- Inert SQL example, stored as text.\nSELECT id, label FROM records WHERE id = ?;\n"),
+            "blocked" => ("example-script.sh", b"#!/bin/sh\necho This example is deliberately rejected.\n"),
+            _ => return Err(VaultError::file_unavailable()),
+        };
+        self.import_bytes(name, content)
+    }
+
+    fn import_bytes(
+        &self,
+        name: &str,
+        bytes: &[u8],
+    ) -> Result<crate::file_crypto::VaultFile, VaultError> {
+        let guard = self.lock_active()?;
+        let vault = guard.as_ref().ok_or_else(VaultError::locked)?;
+        if bytes.len() as u64 > crate::file_crypto::MAX_FILE_BYTES {
+            return Err(VaultError::file_large());
+        }
+        // Screen exactly the in-memory bytes that will be encrypted; never execute examples.
+        crate::import_scan::scan(name, bytes).map_err(VaultError::scan_blocked)?;
         let dir = self.active_file_dir(vault)?;
         let id = loop {
             let candidate = crate::file_crypto::random_id();
@@ -388,6 +413,68 @@ impl VaultStore {
             name: name.into(),
             size_bytes: bytes.len() as u64,
         })
+    }
+
+    pub fn delete_locked(&self, id: &str, confirmation: &str) -> Result<(), VaultError> {
+        if !valid_id(id) || confirmation != format!("DELETE {id}") {
+            return Err(VaultError::new(
+                "delete_confirmation_required",
+                "Enter DELETE followed by the full vault ID to confirm permanent deletion.",
+            ));
+        }
+        let guard = self.lock_active()?;
+        if guard.is_some() {
+            return Err(VaultError::new(
+                "lock_before_delete",
+                "Lock the active vault before deleting a vault.",
+            ));
+        }
+        let header = self.file_path(id)?;
+        if !fs::symlink_metadata(&header)
+            .map_err(|_| VaultError::file_unavailable())?
+            .file_type()
+            .is_file()
+        {
+            return Err(VaultError::storage());
+        }
+        let dir = self.root.join(format!("{id}.files"));
+        if dir.exists() {
+            if !fs::symlink_metadata(&dir)
+                .map_err(|_| VaultError::storage())?
+                .file_type()
+                .is_dir()
+            {
+                return Err(VaultError::storage());
+            }
+            // Refuse deletion when unknown entries are present; never traverse symlinks.
+            let mut entries = Vec::new();
+            for entry in fs::read_dir(&dir).map_err(|_| VaultError::storage())? {
+                let entry = entry.map_err(|_| VaultError::storage())?;
+                let filename = entry.file_name();
+                let name = filename.to_str().ok_or_else(VaultError::storage)?;
+                let valid = name
+                    .strip_suffix(".bvfile")
+                    .or_else(|| name.strip_prefix('.').and_then(|n| n.strip_suffix(".tmp")))
+                    .is_some_and(crate::file_crypto::valid_id);
+                if !valid
+                    || !entry
+                        .file_type()
+                        .map_err(|_| VaultError::storage())?
+                        .is_file()
+                {
+                    return Err(VaultError::storage());
+                }
+                entries.push(entry.path());
+            }
+            for path in entries {
+                fs::remove_file(path).map_err(|_| VaultError::storage())?;
+            }
+            fs::remove_dir(dir).map_err(|_| VaultError::storage())?;
+        }
+        // Header is removed last; an interrupted deletion never silently retains usable files
+        // after removing the header first. Filesystem deletion is not secure erasure on SSDs.
+        fs::remove_file(header).map_err(|_| VaultError::storage())?;
+        Ok(())
     }
 
     pub fn list_files(&self) -> Result<Vec<crate::file_crypto::VaultFile>, VaultError> {
@@ -594,6 +681,73 @@ mod tests {
         VaultStore::new(dir.path().join("vaults"))
     }
     const PASSWORD: &str = "correct horse battery staple";
+
+    #[test]
+    fn example_imports_use_same_scan_gate_and_delete_requires_exact_confirmation() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let vault = store.create("Examples".into(), PASSWORD.into()).unwrap();
+        assert_eq!(
+            store.import_example("blocked").unwrap_err().code,
+            "import_scan_blocked"
+        );
+        assert_eq!(
+            store.import_example("notes").unwrap().name,
+            "example-notes.txt"
+        );
+        assert_eq!(
+            store.import_example("csv").unwrap().name,
+            "example-records.csv"
+        );
+        assert_eq!(
+            store.import_example("sql").unwrap().name,
+            "example-query.sql"
+        );
+        assert_eq!(store.list_files().unwrap().len(), 3);
+        assert_eq!(
+            store
+                .delete_locked(&vault.id, &format!("DELETE {}", vault.id))
+                .unwrap_err()
+                .code,
+            "lock_before_delete"
+        );
+        store.lock().unwrap();
+        assert_eq!(
+            store.delete_locked(&vault.id, "DELETE").unwrap_err().code,
+            "delete_confirmation_required"
+        );
+        assert_eq!(store.list().unwrap().len(), 1);
+        store
+            .delete_locked(&vault.id, &format!("DELETE {}", vault.id))
+            .unwrap();
+        assert!(store.list().unwrap().is_empty());
+        assert!(
+            !dir.path()
+                .join("vaults")
+                .join(format!("{}.files", vault.id))
+                .exists()
+        );
+    }
+    #[test]
+    fn delete_refuses_unexpected_entries_without_removing_header() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let vault = store.create("Guard".into(), PASSWORD.into()).unwrap();
+        store.lock().unwrap();
+        let files = dir
+            .path()
+            .join("vaults")
+            .join(format!("{}.files", vault.id));
+        fs::create_dir(&files).unwrap();
+        fs::write(files.join("unexpected.txt"), b"keep").unwrap();
+        assert!(
+            store
+                .delete_locked(&vault.id, &format!("DELETE {}", vault.id))
+                .is_err()
+        );
+        assert!(store.file_path(&vault.id).unwrap().exists());
+        assert!(files.join("unexpected.txt").exists());
+    }
 
     #[test]
     fn blocked_import_never_creates_a_vault_file() {

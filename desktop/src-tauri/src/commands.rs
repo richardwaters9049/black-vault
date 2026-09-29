@@ -273,6 +273,23 @@ pub async fn import_vault_file(
 }
 
 #[tauri::command]
+pub fn import_example_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    example: String,
+) -> Result<crate::file_crypto::VaultFile, crate::vault::VaultError> {
+    store.import_example(&example)
+}
+
+#[tauri::command]
+pub fn delete_locked_vault(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    vault_id: String,
+    confirmation: String,
+) -> Result<(), crate::vault::VaultError> {
+    store.delete_locked(&vault_id, &confirmation)
+}
+
+#[tauri::command]
 pub fn list_vault_files(
     store: tauri::State<'_, crate::vault::VaultStore>,
 ) -> Result<Vec<crate::file_crypto::VaultFile>, crate::vault::VaultError> {

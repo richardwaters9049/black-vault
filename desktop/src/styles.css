@@ -49,3 +49,12 @@ button:disabled { cursor: not-allowed; }
   .bv-mark-animated, .bv-mark-animated *, .bv-logo-stage, .bv-orbit, .bv-orbit-blip, .vault-reveal, .vault-progress { animation: none !important; }
   .bv-mark-animated .bv-mark-shell, .bv-mark-animated .bv-mark-top, .bv-mark-animated .bv-mark-core, .bv-mark-animated .bv-mark-v { stroke-dashoffset: 0; }
 }
+
+/* Operation feedback is tied to completion of the native promise, never a fake timer. */
+.bv-operation-working { animation: bv-operation-breathe 1s ease-in-out infinite alternate; }
+.bv-operation-progress { animation: bv-operation-sweep 1.05s ease-in-out infinite alternate; }
+.bv-operation-confirm { animation: bv-operation-confirm .35s ease-out both; }
+@keyframes bv-operation-breathe { from { transform: scale(.92); opacity: .55; } to { transform: scale(1.06); opacity: 1; } }
+@keyframes bv-operation-sweep { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+@keyframes bv-operation-confirm { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .bv-operation-working, .bv-operation-progress, .bv-operation-confirm { animation: none !important; } }

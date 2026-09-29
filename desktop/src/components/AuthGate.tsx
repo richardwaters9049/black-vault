@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Eye, EyeOff, KeyRound, Plus, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, Eye, EyeOff, Fingerprint, HardDrive, KeyRound, LockKeyhole, Plus, ShieldCheck } from 'lucide-react';
 import VaultMark from './VaultMark';
 import { Button } from '@/components/ui/button';
 import { errorMessage, native, type VaultSummary } from '@/lib/native';
@@ -54,11 +54,38 @@ export default function AuthGate({ onAuthenticated }: Props) {
     finally { setBusy(false); }
   }
 
-  return <main className="grid place-items-center px-5 py-14">
-    <section className="w-full max-w-md rounded-2xl border border-blue-400/15 bg-[#091522] p-7 shadow-[0_24px_85px_#0008] sm:p-9" aria-labelledby="auth-title">
+  return <main className="relative isolate overflow-hidden px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_22%_34%,rgba(37,99,235,0.10),transparent_48%)]"/>
+    <div className="mx-auto grid w-full max-w-[1320px] overflow-hidden rounded-2xl border border-blue-400/15 bg-[#09111c] shadow-[0_24px_85px_#0008] lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+      <section aria-label="Black Vault introduction" className="relative flex flex-col overflow-hidden border-b border-blue-400/10 bg-[#080f19] p-7 sm:p-10 lg:border-r lg:border-b-0 lg:p-12">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(rgba(96,165,250,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(96,165,250,0.055)_1px,transparent_1px)] [background-size:38px_38px] [mask-image:linear-gradient(to_bottom,black,transparent_85%)]"/>
+        <div className="relative flex items-center gap-3">
+          <div className="grid size-11 place-items-center rounded-xl border border-blue-400/25 bg-blue-400/10"><VaultMark /></div>
+          <div><p className="text-xs font-semibold tracking-[0.16em]">BLACK VAULT</p><p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-slate-500">Private by design</p></div>
+        </div>
+        <div className="relative mt-12 max-w-lg lg:mt-24">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-sky-400/15 bg-sky-400/[0.06] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-sky-300"><span className="size-1.5 rounded-full bg-emerald-400"/> Offline-first security</div>
+          <h2 className="max-w-md text-3xl font-medium leading-[1.17] tracking-tight text-slate-100 sm:text-4xl xl:text-[2.75rem]">Your files.<br/><span className="text-sky-300">Your keys.</span><br/>Your control.</h2>
+          <p className="mt-6 max-w-sm text-sm leading-7 text-slate-400">A private space for your important documents, encrypted locally and accessible only through your vault credentials.</p>
+        </div>
+        <div className="relative mt-12 grid gap-3 sm:grid-cols-2 lg:mt-auto lg:pt-16">
+          <div className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
+            <LockKeyhole size={18} className="text-sky-300"/>
+            <p className="mt-4 text-xs font-medium text-slate-200">Encrypted storage</p>
+            <p className="mt-1.5 text-[11px] leading-5 text-slate-500">Protected vaults and nested compartments.</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
+            <HardDrive size={18} className="text-sky-300"/>
+            <p className="mt-4 text-xs font-medium text-slate-200">Stored on this Mac</p>
+            <p className="mt-1.5 text-[11px] leading-5 text-slate-500">No online account or cloud sign-in required.</p>
+          </div>
+        </div>
+        <div className="relative mt-6 flex items-center justify-between border-t border-white/[0.07] pt-5 font-mono text-[10px] uppercase tracking-[0.12em] text-slate-600"><span>Black Vault / Desktop</span><span className="flex items-center gap-1">Private workspace <ArrowUpRight size={12}/></span></div>
+      </section>
+      <section className="flex min-w-0 flex-col justify-center bg-[#0c1725] p-7 sm:p-10 lg:px-12 lg:py-14" aria-labelledby="auth-title">
       <div className="mb-8 flex items-center gap-3">
-        <div className="grid size-11 place-items-center rounded-xl border border-blue-400/25 bg-blue-400/10"><VaultMark /></div>
-        <div><p className="text-xs font-semibold tracking-[0.16em]">BLACK VAULT</p><p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-slate-500">Local authentication</p></div>
+        <div className="grid size-10 place-items-center rounded-xl border border-sky-400/15 bg-sky-400/[0.06]"><Fingerprint size={20} className="text-sky-300"/></div>
+        <div><p className="text-xs font-semibold tracking-[0.12em]">Secure access</p><p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-slate-500">Local authentication</p></div>
       </div>
       <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-sky-400">{creating ? 'First-time setup' : 'Welcome back'}</p>
       <h1 id="auth-title" className="text-2xl font-medium">{creating ? 'Create your first vault' : 'Unlock your workspace'}</h1>
@@ -105,6 +132,7 @@ export default function AuthGate({ onAuthenticated }: Props) {
             className="w-full text-center text-xs text-sky-400 hover:text-sky-200">{creating ? 'Unlock an existing vault' : 'Create another vault'}</button>}
         </form>}
       <p className="mt-8 flex items-start gap-2 border-t border-border pt-5 text-xs leading-5 text-slate-500"><ShieldCheck size={15} className="mt-0.5 shrink-0 text-sky-400" />No online account or password recovery. Losing your vault password means losing access to its encrypted files.</p>
-    </section>
+      </section>
+    </div>
   </main>;
 }

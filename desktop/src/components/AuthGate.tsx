@@ -12,7 +12,8 @@ export default function AuthGate({ onAuthenticated }: Props) {
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState('');
   const [name, setName] = useState('');
-  const [password, setPassword] = useState('');
+  // Local development-only prefill; .env.development.local is ignored by Git.
+  const [password, setPassword] = useState(import.meta.env.DEV ? (import.meta.env.VITE_DEV_VAULT_PASSWORD ?? '') : '');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);

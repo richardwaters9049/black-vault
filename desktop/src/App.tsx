@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, File, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole } from 'lucide-react';
+import { Check, ChevronDown, File, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import VaultWorkspace from '@/components/VaultWorkspace';
 import VaultFiles from '@/components/VaultFiles';
@@ -16,6 +16,7 @@ export default function App() {
   const [session, setSession] = useState<VaultSummary | null>(null);
   const [booting, setBooting] = useState(true);
   const [examplesOpen, setExamplesOpen] = useState(false);
+  const [chosenExample, setChosenExample] = useState<{ id: string; nonce: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -76,8 +77,18 @@ export default function App() {
         <span className="text-xs font-semibold tracking-[0.12em]">BLACK VAULT</span>
       </div>
       <div className="mt-7 flex items-center gap-3 rounded-lg border border-blue-400/10 bg-blue-500/10 px-3 py-2.5 text-sm text-blue-300" aria-current="page"><LayoutDashboard size={16} /> Overview</div>
-      <button type="button" aria-expanded={examplesOpen} onClick={() => setExamplesOpen(value => !value)} className="mt-2 flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm text-slate-400 hover:text-blue-300"><FolderOpen size={16} /> Example Files <span className="ml-auto">{examplesOpen ? "−" : "+"}</span></button>
-      {examplesOpen && <ExampleFiles />}
+      <button type="button" aria-controls="example-files-panel" aria-expanded={examplesOpen}
+        onClick={() => setExamplesOpen(value => !value)}
+        className={"mt-2 flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors duration-200 " + (examplesOpen ? "border-blue-400/15 bg-blue-400/[0.07] text-sky-200" : "border-transparent text-slate-400 hover:bg-white/[0.035] hover:text-blue-300")}>
+        <FolderOpen size={16} className="shrink-0" /> Example Files
+        <ChevronDown size={15} className={"ml-auto transition-transform duration-300 ease-out " + (examplesOpen ? "rotate-180" : "")} />
+      </button>
+      <div id="example-files-panel" aria-hidden={!examplesOpen} inert={!examplesOpen}
+        className={"grid transition-[grid-template-rows,opacity,transform] duration-300 ease-out motion-reduce:transition-none " + (examplesOpen ? "grid-rows-[1fr] translate-y-0 opacity-100" : "pointer-events-none grid-rows-[0fr] -translate-y-1 opacity-0")}>
+        <div className="min-h-0 overflow-hidden">
+          <ExampleFiles onSelect={id => setChosenExample(current => ({ id, nonce: (current?.nonce ?? 0) + 1 }))} />
+        </div>
+      </div>
       <div className="mt-auto hidden space-y-3 pt-12 md:block">
         <div className="flex items-center gap-2 text-xs text-slate-400"><span className="size-1.5 rounded-full bg-emerald-400" /> On this Mac</div>
         <p className="font-mono text-[10px] uppercase tracking-widest text-slate-600">Desktop preview · {info?.version ?? '—'}</p>
@@ -93,10 +104,10 @@ export default function App() {
       <section className="pt-6 pb-4">
         <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">Your private workspace</p>
         <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Encrypt and decrypt your files.</h1>
-        <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Open Example Files on the left, then drag a sample straight into the workspace below.</p>
+        <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Open Example Files on the left. Click a sample to select it, or drag it into the workspace below.</p>
       </section>
 
-      <section className="rounded-xl border border-border bg-card px-5 pb-6 pt-1 sm:px-7"><VaultFiles vaultId={session.id} /></section>
+      <section className="rounded-xl border border-border bg-card px-5 pb-6 pt-1 sm:px-7"><VaultFiles vaultId={session.id} chosenExample={chosenExample} /></section>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <Card className="gap-3 rounded-xl border border-border ring-0">

@@ -3,6 +3,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import App from './App';
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }));
+vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => ({ onDragDropEvent: async () => () => {} }) }));
 import type { VaultSummary } from './lib/native';
 
 const id = '1234567890abcdef1234567890abcdef';

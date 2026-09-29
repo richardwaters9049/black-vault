@@ -2,6 +2,24 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-desktop",
   "description": "Allow the main local window to use local vault lifecycle commands and native file selection.",
-  "windows": ["main"],
-  "permissions": ["allow-get-desktop-info", "allow-select-file", "allow-list-vaults", "allow-create-vault", "allow-unlock-vault", "allow-lock-vault", "allow-import-vault-file", "allow-import-example-file", "allow-delete-locked-vault", "allow-list-vault-files", "allow-export-vault-file"]
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "allow-get-desktop-info",
+    "allow-select-file",
+    "allow-list-vaults",
+    "allow-create-vault",
+    "allow-unlock-vault",
+    "allow-lock-vault",
+    "allow-import-vault-file",
+    "allow-describe-dropped-file",
+    "allow-import-dropped-file",
+    "allow-import-example-file",
+    "allow-delete-locked-vault",
+    "allow-list-vault-files",
+    "allow-export-vault-file",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
 }

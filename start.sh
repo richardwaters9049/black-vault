@@ -508,7 +508,17 @@ desktop_npm() {
 
 main() {
     case "${1:-start}" in
-        start|black-v-start) launch_desktop ;;
+        start|black-v-start)
+            # A local ignored development credential means the user expects the
+            # Vite development login, not the compiled release (which omits secrets).
+            if [[ -s "$PROJECT_ROOT/desktop/.env.development.local" ]]; then
+                info "Local development configuration detected; starting development app."
+                desktop_npm desktop:dev
+            else
+                launch_desktop
+            fi
+            ;;
+        release) launch_desktop ;;
         dev) desktop_npm desktop:dev ;;
         build) desktop_npm desktop:build ;;
         test)
@@ -522,8 +532,9 @@ main() {
         logs) show_logs ;;
         help|-h|--help)
             echo "Black Vault — native desktop"
-            echo "  ./start.sh              Launch the compiled macOS app"
+            echo "  ./start.sh              Launch dev app when local dev config exists; otherwise compiled app"
             echo "  ./start.sh dev          Run the Tauri development app"
+            echo "  ./start.sh release      Launch the compiled macOS release app"
             echo "  ./start.sh build        Build the macOS app bundle"
             echo "  ./start.sh test         Run TypeScript, frontend and Rust tests"
             echo "  ./start.sh legacy-start  Start the preserved Docker stack"

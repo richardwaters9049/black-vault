@@ -19,3 +19,15 @@ Create a disposable vault; open Example Files; import notes, CSV and SQL; confir
 - Encrypted file rows can be dragged into Decryption or exported by button; the Rust export picker chooses a new plaintext destination and refuses overwrites. Arbitrary operating-system file drops are deliberately **not** accepted; use the secure macOS picker to import real files, so JavaScript never supplies filesystem paths.
 - While native work is pending, a subtle blue animated icon/progress indicator runs; green confirmation only appears after the native promise resolves successfully, red on failure, and cancellation is neutral. Reduced-motion users get static indicators. The animation is indeterminate and does not claim measured cryptographic progress.
 - Manually check dragging built-in examples, rejecting the script, encryption tab import picker, dragging encrypted entries to Decryption, cancellation and successful export; automated DOM and Rust tests do not replace native GUI acceptance.
+
+### Native Finder drop and explicit confirmation
+- The macOS webview reports Finder drag/drop position; Rust independently captures the one-file native drop path. JavaScript never submits an arbitrary filesystem path for import.
+- Dropping a Finder file into Encryption stages its filename and size. Encrypt explicitly consumes the native pending path and uses the existing regular-file limit, static scan and encryption pipeline.
+- Click an Example File in the sidebar if WebKit HTML drag data is unavailable. The selected example still requires Encrypt.
+- Decryption stages a stored encrypted file; Decrypt invokes the existing native save/export picker.
+- A pending Finder path is cleared when the vault locks. Native Finder drag/drop requires manual macOS GUI acceptance testing.
+
+### Local development password prefill
+- AuthGate reads VITE_DEV_VAULT_PASSWORD only when Vite is in development mode.
+- Store any disposable development credential in desktop/.env.development.local (already Git-ignored), never tracked source. The password is not automatically submitted.
+- The release app launched with ./start.sh does not include the development-only prefill; use ./start.sh dev for development.

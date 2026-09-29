@@ -1,8 +1,8 @@
 # Black Vault Desktop
 
-Sprint 01 introduces a standalone macOS application using Tauri 2, React, Vite, TypeScript and Tailwind CSS. The existing `backend/`, `frontend/` and cryptographic compatibility suite remain unchanged.
+Sprint 01 introduced a standalone macOS application using Tauri 2, React, Vite, TypeScript and Tailwind CSS. Sprint 02 now adds the first offline local-vault lifecycle: create, list, unlock and lock. The existing `backend/`, `frontend/` and cryptographic compatibility suite remain unchanged.
 
-This is the desktop foundation. It displays native application information and opens the macOS file picker. Selecting a file returns its name and size, without reading, copying, uploading or encrypting its contents. Selection exists only in memory and can be cleared. Local vault operations belong to Sprint 02.
+Vault headers are authenticated and encrypted locally. Each vault gets a separate random 256-bit master key, wrapped using a password-derived key. Display names are encrypted and hidden while locked. The native file picker still returns metadata only: selecting a file does **not** import or encrypt it. Encrypted file persistence, SQLite metadata, account recovery and sharing are not implemented yet.
 
 ## Prerequisites
 
@@ -53,7 +53,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
 ```
 
-Frontend tests exercise the real typed wrapper with Tauri's mocked IPC transport and render the dashboard through React DOM. They cover selection, cancellation, recovery from errors, clearing the selection, safe filename rendering and browser-only rejection. Rust tests cover serialisation, metadata validation and IPC permissions for local/remote origins and window labels. The native picker itself must also be exercised manually on macOS.
+Frontend tests exercise the typed wrapper with Tauri's mocked IPC transport and render the dashboard and vault controls. They cover selection, cancellation, errors, safe filename rendering, creation, locking, unlocking and browser-only rejection. Rust tests cover metadata validation, IPC permissions, local encrypted vault persistence, wrong passwords, tampering, independent vaults, invalid inputs and the shared Argon2id compatibility vectors. The native picker and complete lifecycle must also be exercised manually on macOS.
 
 Run the original suites separately from the repository root:
 
@@ -69,6 +69,8 @@ Those existing suites require their original prerequisites; the live HTTP test a
 ```text
 desktop/
 ├── src/App.tsx                   Dashboard and selection state
+├── src/components/VaultWorkspace.tsx  Create, list, unlock and lock UI
+├── src-tauri/src/vault.rs        Per-vault encryption and local lifecycle
 ├── src/components/ui/           Adapted existing UI components
 ├── src/lib/native.ts            Typed invoke boundary and error presentation
 ├── src-tauri/src/commands.rs    Native status, picker and metadata validation
@@ -89,22 +91,22 @@ The Rust command return types use camelCase serialisation, mirrored by the TypeS
 | --- | --- | --- |
 | `get_desktop_info` | None | `{ appName, version, platform, architecture }` |
 | `select_file` | None | `{ name, sizeBytes }`, or `null` on cancellation |
+| `list_vaults` | None | Array of `{ id, name, isLocked }`; name is `null` when locked |
+| `create_vault` | `{ name, password }` | Newly created and unlocked vault summary |
+| `unlock_vault` | `{ vaultId, password }` | Unlocked vault summary or structured error |
+| `lock_vault` | None | Releases active in-memory master key |
 
 Failures are serialised as `{ code, message }`. A native picker supplies the path inside Rust; JavaScript cannot request metadata for arbitrary paths. Only the basename and byte count cross IPC. Rust validates that the selection is a regular file and that its size fits JavaScript's safe integer range. Blocking picker work runs off the main event loop; a Rust mutex prevents concurrent dialogs.
 
 `build.rs` registers the application commands with Tauri's permission system. Only the local `main` window receives their permissions. The webview has no filesystem, shell, HTTP or direct dialog-plugin permissions. The Rust dialog plugin is invoked by the dedicated command. Production CSP blocks remote resources and network connections; development allows the loopback Vite/HMR connection in addition to Tauri IPC, plus the inline scripts and styles injected by Vite. CSP remains enabled in both modes.
 
-Selection/cancellation/rejection events go to process diagnostics without filenames, paths or content. Durable audit storage is future work. No file data, keys, passwords, selection history or database records are persisted by the desktop scaffold.
+Selection/cancellation/rejection events go to process diagnostics without filenames, paths or content. Durable audit storage is future work. No plaintext file data, raw keys, passwords, selection history or database records are persisted. Sprint 02 persists an encrypted vault header with a password-wrapped master key; no file contents are stored yet.
 
 ## Sprint 02
 
-1. Extract or reuse the existing Rust crypto core without coupling the desktop executable to Axum/PostgreSQL; retain the shared compatibility vectors.
-2. Design local vault creation, unlock and lock commands with keys owned by Rust and explicit cleanup.
-3. Design local persistence and migration separately. This sprint adds no SQLite or database migration.
-4. Replace metadata-only selection with an authorised local encryption workflow; revalidate the file at the time it is opened.
-5. Add end-to-end vault tests, durable audit handling, recovery behaviour and distribution signing.
+**Implemented foundation:** Standalone Rust cryptography uses the same canonical Argon2id parameters and shared key-derivation test fixtures as the existing backend: v19, 19,456 KiB, 2 iterations, parallelism 1, 16-byte random salt, 32-byte KEK. Each vault receives a fresh random 32-byte master key; AES-256-GCM wraps it together with the display name, using a random 12-byte nonce and domain-separated vault-ID AAD. The disk header contains the version, opaque random ID, KDF parameters and authenticated ciphertext. The vaults reside under Tauri's application-local data directory, not in the source tree. On Unix, the vault directory is set to mode `0700` and new header files to `0600`; new headers are written using a create-new temporary file, sync, same-directory rename and directory sync. Only one vault can be unlocked per application session. Rust retains the key in zeroising memory, and locking drops it; JavaScript never receives a key. Locked names remain encrypted. This is best-effort process-memory clearing, not protection from malware controlling an unlocked host.
 
-No file-sharing functionality is included.
+**Remaining Sprint 02 work:** implement per-file DEKs and authenticated encrypted file import/export; design encrypted metadata and crash recovery; exercise the native application manually (create, quit, restart, wrong password, unlock, lock); add file-access and lifecycle regression tests. There is no SQLite database, account recovery, audit chain or sharing functionality in this slice. Losing a vault password currently means losing access; do not put irreplaceable data in this foundation build.
 
 ## References
 

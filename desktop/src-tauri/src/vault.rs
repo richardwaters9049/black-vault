@@ -1,0 +1,608 @@
+//! Sprint 02 local vault foundation. No secret material crosses the Tauri IPC boundary.
+//! A separate random master key is wrapped for each vault with a password-derived KEK.
+use aes_gcm::{
+    Aes256Gcm, Nonce,
+    aead::{Aead, KeyInit, Payload},
+};
+use argon2::{Algorithm, Argon2, Params, Version};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use rand::{RngCore, rngs::OsRng};
+use serde::{Deserialize, Serialize};
+use std::{
+    fs::{self, File, OpenOptions},
+    io::Write,
+    path::PathBuf,
+    sync::Mutex,
+};
+use zeroize::{Zeroize, Zeroizing};
+
+const KDF_MEMORY_KIB: u32 = 19_456;
+const KDF_ITERATIONS: u32 = 2;
+const KDF_PARALLELISM: u32 = 1;
+const MASTER_KEY_LEN: usize = 32;
+const SALT_LEN: usize = 16;
+const NONCE_LEN: usize = 12;
+const RECORD_MAX_BYTES: u64 = 8_192;
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct VaultError {
+    pub code: &'static str,
+    pub message: &'static str,
+}
+impl VaultError {
+    fn new(code: &'static str, message: &'static str) -> Self {
+        Self { code, message }
+    }
+    fn storage() -> Self {
+        Self::new("storage_unavailable", "Local vault storage is unavailable.")
+    }
+    fn invalid() -> Self {
+        Self::new(
+            "invalid_credentials",
+            "The password is incorrect or the vault cannot be authenticated.",
+        )
+    }
+    fn busy() -> Self {
+        Self::new(
+            "vault_already_unlocked",
+            "Lock the currently open vault first.",
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultSummary {
+    pub id: String,
+    // Names are encrypted on disk. Only the unlocked vault exposes its name.
+    pub name: Option<String>,
+    pub is_locked: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KdfRecord {
+    algorithm: String,
+    salt: String,
+    m_cost: u32,
+    t_cost: u32,
+    p_cost: u32,
+    output_len: usize,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WrappedSecret {
+    nonce: String,
+    ciphertext: String,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VaultRecord {
+    version: u8,
+    id: String,
+    kdf: KdfRecord,
+    wrapped: WrappedSecret,
+}
+struct OpenVault {
+    id: String,
+    name: Zeroizing<String>,
+    // Zeroising is best-effort; host compromise while unlocked is out of scope.
+    #[allow(dead_code)]
+    // Retained for subsequent encrypted-file operations; never exposed to JavaScript.
+    master_key: Zeroizing<[u8; MASTER_KEY_LEN]>,
+}
+pub struct VaultStore {
+    root: PathBuf,
+    active: Mutex<Option<OpenVault>>,
+}
+impl VaultStore {
+    pub fn new(root: PathBuf) -> Self {
+        Self {
+            root,
+            active: Mutex::new(None),
+        }
+    }
+
+    fn lock_active(&self) -> Result<std::sync::MutexGuard<'_, Option<OpenVault>>, VaultError> {
+        self.active.lock().map_err(|_| {
+            VaultError::new(
+                "vault_state_unavailable",
+                "The vault session is unavailable.",
+            )
+        })
+    }
+    fn ensure_root(&self) -> Result<(), VaultError> {
+        fs::create_dir_all(&self.root).map_err(|_| VaultError::storage())?;
+        let meta = fs::symlink_metadata(&self.root).map_err(|_| VaultError::storage())?;
+        if !meta.file_type().is_dir() {
+            return Err(VaultError::storage());
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&self.root, fs::Permissions::from_mode(0o700))
+                .map_err(|_| VaultError::storage())?;
+        }
+        Ok(())
+    }
+    fn file_path(&self, id: &str) -> Result<PathBuf, VaultError> {
+        if !valid_id(id) {
+            return Err(VaultError::new(
+                "invalid_vault_id",
+                "The vault identifier is invalid.",
+            ));
+        }
+        Ok(self.root.join(format!("{id}.vault")))
+    }
+
+    pub fn list(&self) -> Result<Vec<VaultSummary>, VaultError> {
+        let guard = self.lock_active()?;
+        if !self.root.exists() {
+            return Ok(Vec::new());
+        }
+        let mut result = Vec::new();
+        for entry in fs::read_dir(&self.root).map_err(|_| VaultError::storage())? {
+            let entry = entry.map_err(|_| VaultError::storage())?;
+            if !entry
+                .file_type()
+                .map_err(|_| VaultError::storage())?
+                .is_file()
+            {
+                continue;
+            }
+            let filename = entry.file_name();
+            let Some(id) = filename
+                .to_str()
+                .and_then(|name| name.strip_suffix(".vault"))
+            else {
+                continue;
+            };
+            if !valid_id(id) {
+                continue;
+            }
+            let open = guard.as_ref().filter(|vault| vault.id == id);
+            result.push(VaultSummary {
+                id: id.to_owned(),
+                name: open.map(|vault| vault.name.to_string()),
+                is_locked: open.is_none(),
+            });
+        }
+        result.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(result)
+    }
+
+    pub fn create(&self, name: String, password: String) -> Result<VaultSummary, VaultError> {
+        let password = Zeroizing::new(password);
+        let name = Zeroizing::new(name);
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 80 || name.chars().any(char::is_control) {
+            return Err(VaultError::new(
+                "invalid_vault_name",
+                "Use a vault name of 1–80 visible characters.",
+            ));
+        }
+        if !(12..=1024).contains(&password.len()) {
+            return Err(VaultError::new(
+                "invalid_password",
+                "Use a password of 12–1024 UTF-8 bytes.",
+            ));
+        }
+        let mut guard = self.lock_active()?;
+        if guard.is_some() {
+            return Err(VaultError::busy());
+        }
+        self.ensure_root()?;
+        let id = loop {
+            let mut bytes = [0u8; 16];
+            OsRng.fill_bytes(&mut bytes);
+            let id: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+            if !self.file_path(&id)?.exists() {
+                break id;
+            }
+        };
+        let mut salt = [0u8; SALT_LEN];
+        OsRng.fill_bytes(&mut salt);
+        let kdf = KdfRecord {
+            algorithm: "argon2id-v19".to_owned(),
+            salt: STANDARD.encode(salt),
+            m_cost: KDF_MEMORY_KIB,
+            t_cost: KDF_ITERATIONS,
+            p_cost: KDF_PARALLELISM,
+            output_len: MASTER_KEY_LEN,
+        };
+        let kek = derive(&password, &kdf)?;
+        salt.zeroize();
+        let mut master_key = Zeroizing::new([0u8; MASTER_KEY_LEN]);
+        OsRng.fill_bytes(master_key.as_mut());
+        // The encrypted payload is [u16 name byte length][name UTF-8][32-byte master key].
+        let name_bytes = name.as_bytes();
+        let mut plaintext =
+            Zeroizing::new(Vec::with_capacity(2 + name_bytes.len() + MASTER_KEY_LEN));
+        plaintext.extend_from_slice(&(name_bytes.len() as u16).to_be_bytes());
+        plaintext.extend_from_slice(name_bytes);
+        plaintext.extend_from_slice(master_key.as_ref());
+        let wrapped = seal(&kek, &id, &plaintext)?;
+        let record = VaultRecord {
+            version: 1,
+            id: id.clone(),
+            kdf,
+            wrapped,
+        };
+        let bytes = serde_json::to_vec(&record).map_err(|_| VaultError::storage())?;
+        self.persist_new(&id, &bytes)?;
+        *guard = Some(OpenVault {
+            id: id.clone(),
+            name: Zeroizing::new(name.to_owned()),
+            master_key,
+        });
+        Ok(VaultSummary {
+            id,
+            name: Some(name.to_owned()),
+            is_locked: false,
+        })
+    }
+
+    pub fn unlock(&self, id: String, password: String) -> Result<VaultSummary, VaultError> {
+        let password = Zeroizing::new(password);
+        let mut guard = self.lock_active()?;
+        if guard.is_some() {
+            return Err(VaultError::busy());
+        }
+        let path = self.file_path(&id)?;
+        let meta = fs::symlink_metadata(&path)
+            .map_err(|_| VaultError::new("vault_not_found", "This local vault does not exist."))?;
+        if !meta.file_type().is_file() || meta.len() > RECORD_MAX_BYTES {
+            return Err(VaultError::new(
+                "invalid_vault_record",
+                "The vault header is invalid.",
+            ));
+        }
+        let bytes = fs::read(path).map_err(|_| VaultError::storage())?;
+        let record: VaultRecord = serde_json::from_slice(&bytes)
+            .map_err(|_| VaultError::new("invalid_vault_record", "The vault header is invalid."))?;
+        if record.version != 1 || record.id != id {
+            return Err(VaultError::new(
+                "unsupported_vault",
+                "This vault header version or identifier is unsupported.",
+            ));
+        }
+        let kek = derive(&password, &record.kdf)?;
+        let plaintext = open(&kek, &id, &record.wrapped)?;
+        if plaintext.len() < 2 + MASTER_KEY_LEN {
+            return Err(VaultError::invalid());
+        }
+        let name_len = usize::from(u16::from_be_bytes([plaintext[0], plaintext[1]]));
+        if name_len == 0 || plaintext.len() != 2 + name_len + MASTER_KEY_LEN {
+            return Err(VaultError::invalid());
+        }
+        let name = Zeroizing::new(
+            std::str::from_utf8(&plaintext[2..2 + name_len])
+                .map_err(|_| VaultError::invalid())?
+                .to_owned(),
+        );
+        if name.chars().count() > 80 || name.chars().any(char::is_control) {
+            return Err(VaultError::invalid());
+        }
+        let mut master_key = Zeroizing::new([0u8; MASTER_KEY_LEN]);
+        master_key.copy_from_slice(&plaintext[2 + name_len..]);
+        *guard = Some(OpenVault {
+            id: id.clone(),
+            name: Zeroizing::new(name.to_string()),
+            master_key,
+        });
+        Ok(VaultSummary {
+            id,
+            name: Some(name.to_string()),
+            is_locked: false,
+        })
+    }
+
+    pub fn lock(&self) -> Result<(), VaultError> {
+        let mut guard = self.lock_active()?;
+        // Drop zeroises the master key. There is no active session token in JavaScript.
+        *guard = None;
+        Ok(())
+    }
+
+    fn persist_new(&self, id: &str, bytes: &[u8]) -> Result<(), VaultError> {
+        if bytes.len() as u64 > RECORD_MAX_BYTES {
+            return Err(VaultError::storage());
+        }
+        let destination = self.file_path(id)?;
+        if destination.exists() {
+            return Err(VaultError::storage());
+        }
+        let temp = self.root.join(format!(".{id}.tmp"));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let result = (|| -> std::io::Result<()> {
+            let mut file = options.open(&temp)?;
+            file.write_all(bytes)?;
+            file.sync_all()?;
+            fs::rename(&temp, &destination)?;
+            File::open(&self.root)?.sync_all()?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temp);
+            return Err(VaultError::storage());
+        }
+        Ok(())
+    }
+}
+
+fn valid_id(id: &str) -> bool {
+    id.len() == 32
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+fn derive(
+    password: &str,
+    record: &KdfRecord,
+) -> Result<Zeroizing<[u8; MASTER_KEY_LEN]>, VaultError> {
+    if record.algorithm != "argon2id-v19"
+        || record.m_cost != KDF_MEMORY_KIB
+        || record.t_cost != KDF_ITERATIONS
+        || record.p_cost != KDF_PARALLELISM
+        || record.output_len != MASTER_KEY_LEN
+    {
+        return Err(VaultError::new(
+            "unsupported_kdf",
+            "This vault's key derivation parameters are unsupported.",
+        ));
+    }
+    let salt = STANDARD
+        .decode(&record.salt)
+        .map_err(|_| VaultError::invalid())?;
+    if salt.len() != SALT_LEN {
+        return Err(VaultError::invalid());
+    }
+    let params = Params::new(
+        KDF_MEMORY_KIB,
+        KDF_ITERATIONS,
+        KDF_PARALLELISM,
+        Some(MASTER_KEY_LEN),
+    )
+    .map_err(|_| VaultError::invalid())?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let mut result = Zeroizing::new([0u8; MASTER_KEY_LEN]);
+    argon2
+        .hash_password_into(password.as_bytes(), &salt, result.as_mut())
+        .map_err(|_| VaultError::invalid())?;
+    Ok(result)
+}
+fn aad(id: &str) -> String {
+    format!("black-vault:desktop:v1:vault-header:{id}")
+}
+fn seal(key: &[u8; MASTER_KEY_LEN], id: &str, data: &[u8]) -> Result<WrappedSecret, VaultError> {
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| VaultError::storage())?;
+    let mut nonce = [0u8; NONCE_LEN];
+    OsRng.fill_bytes(&mut nonce);
+    let context = aad(id);
+    let ciphertext = cipher
+        .encrypt(
+            Nonce::from_slice(&nonce),
+            Payload {
+                msg: data,
+                aad: context.as_bytes(),
+            },
+        )
+        .map_err(|_| VaultError::storage())?;
+    Ok(WrappedSecret {
+        nonce: STANDARD.encode(nonce),
+        ciphertext: STANDARD.encode(ciphertext),
+    })
+}
+fn open(
+    key: &[u8; MASTER_KEY_LEN],
+    id: &str,
+    wrapped: &WrappedSecret,
+) -> Result<Zeroizing<Vec<u8>>, VaultError> {
+    let nonce = STANDARD
+        .decode(&wrapped.nonce)
+        .map_err(|_| VaultError::invalid())?;
+    if nonce.len() != NONCE_LEN {
+        return Err(VaultError::invalid());
+    }
+    let ciphertext = STANDARD
+        .decode(&wrapped.ciphertext)
+        .map_err(|_| VaultError::invalid())?;
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| VaultError::invalid())?;
+    let context = aad(id);
+    let plaintext = cipher
+        .decrypt(
+            Nonce::from_slice(&nonce),
+            Payload {
+                msg: &ciphertext,
+                aad: context.as_bytes(),
+            },
+        )
+        .map_err(|_| VaultError::invalid())?;
+    Ok(Zeroizing::new(plaintext))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    fn store(dir: &TempDir) -> VaultStore {
+        VaultStore::new(dir.path().join("vaults"))
+    }
+    const PASSWORD: &str = "correct horse battery staple";
+
+    #[test]
+    fn creation_persists_only_encrypted_metadata_and_lock_clears_display_name() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let created = store
+            .create("Private records".into(), PASSWORD.into())
+            .unwrap();
+        assert_eq!(created.name.as_deref(), Some("Private records"));
+        let on_disk = fs::read_to_string(store.file_path(&created.id).unwrap()).unwrap();
+        assert!(!on_disk.contains("Private records"));
+        assert!(!on_disk.contains(PASSWORD));
+        assert_eq!(store.list().unwrap()[0], created);
+        store.lock().unwrap();
+        let locked = store.list().unwrap();
+        assert_eq!(locked[0].name, None);
+        assert!(locked[0].is_locked);
+        let reopened = VaultStore::new(dir.path().join("vaults"))
+            .unlock(created.id, PASSWORD.into())
+            .unwrap();
+        assert_eq!(reopened.name.as_deref(), Some("Private records"));
+    }
+
+    #[test]
+    fn wrong_password_does_not_unlock_or_modify_disk() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let vault = store.create("Personal".into(), PASSWORD.into()).unwrap();
+        store.lock().unwrap();
+        let path = store.file_path(&vault.id).unwrap();
+        let before = fs::read(&path).unwrap();
+        assert_eq!(
+            store
+                .unlock(vault.id.clone(), "wrong password".into())
+                .unwrap_err()
+                .code,
+            "invalid_credentials"
+        );
+        assert!(store.list().unwrap()[0].is_locked);
+        assert_eq!(fs::read(path).unwrap(), before);
+    }
+
+    #[test]
+    fn tampered_ciphertext_and_cross_vault_swap_are_rejected() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let first = store.create("First".into(), PASSWORD.into()).unwrap();
+        store.lock().unwrap();
+        let second = store.create("Second".into(), PASSWORD.into()).unwrap();
+        store.lock().unwrap();
+        let a = store.file_path(&first.id).unwrap();
+        let b = store.file_path(&second.id).unwrap();
+        let mut first_record: VaultRecord = serde_json::from_slice(&fs::read(&a).unwrap()).unwrap();
+        let second_record: VaultRecord = serde_json::from_slice(&fs::read(&b).unwrap()).unwrap();
+        assert_ne!(first_record.kdf.salt, second_record.kdf.salt);
+        assert_ne!(
+            first_record.wrapped.ciphertext,
+            second_record.wrapped.ciphertext
+        );
+        let mut bytes = STANDARD.decode(&first_record.wrapped.ciphertext).unwrap();
+        bytes[0] ^= 1;
+        first_record.wrapped.ciphertext = STANDARD.encode(bytes);
+        fs::write(&a, serde_json::to_vec(&first_record).unwrap()).unwrap();
+        assert_eq!(
+            store
+                .unlock(first.id.clone(), PASSWORD.into())
+                .unwrap_err()
+                .code,
+            "invalid_credentials"
+        );
+        fs::write(&a, serde_json::to_vec(&second_record).unwrap()).unwrap();
+        assert_eq!(
+            store.unlock(first.id, PASSWORD.into()).unwrap_err().code,
+            "unsupported_vault"
+        );
+    }
+
+    #[test]
+    fn a_single_vault_can_be_open_and_lock_is_idempotent() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let first = store.create("One".into(), PASSWORD.into()).unwrap();
+        assert_eq!(
+            store
+                .create("Two".into(), PASSWORD.into())
+                .unwrap_err()
+                .code,
+            "vault_already_unlocked"
+        );
+        assert_eq!(
+            store
+                .unlock(first.id.clone(), PASSWORD.into())
+                .unwrap_err()
+                .code,
+            "vault_already_unlocked"
+        );
+        store.lock().unwrap();
+        store.lock().unwrap();
+        assert_eq!(
+            store
+                .unlock(first.id, PASSWORD.into())
+                .unwrap()
+                .name
+                .as_deref(),
+            Some("One")
+        );
+    }
+
+    #[test]
+    fn invalid_inputs_and_traversal_are_rejected() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        assert_eq!(
+            store.create(" ".into(), PASSWORD.into()).unwrap_err().code,
+            "invalid_vault_name"
+        );
+        assert_eq!(
+            store
+                .create("Good".into(), "short".into())
+                .unwrap_err()
+                .code,
+            "invalid_password"
+        );
+        assert_eq!(
+            store
+                .unlock("../secret".into(), PASSWORD.into())
+                .unwrap_err()
+                .code,
+            "invalid_vault_id"
+        );
+        assert!(store.list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn key_derivation_matches_shared_browser_and_backend_vectors() {
+        let fixtures: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/crypto-v1.json")).unwrap();
+        for fixture in fixtures.as_array().unwrap() {
+            let params = &fixture["params"];
+            let kdf = KdfRecord {
+                algorithm: "argon2id-v19".into(),
+                salt: params["salt"].as_str().unwrap().into(),
+                m_cost: params["m_cost"].as_u64().unwrap() as u32,
+                t_cost: params["t_cost"].as_u64().unwrap() as u32,
+                p_cost: params["p_cost"].as_u64().unwrap() as u32,
+                output_len: params["output_len"].as_u64().unwrap() as usize,
+            };
+            let actual = derive(fixture["password"].as_str().unwrap(), &kdf).unwrap();
+            assert_eq!(
+                STANDARD.encode(actual.as_ref()),
+                fixture["key"].as_str().unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn unsupported_kdf_is_rejected_before_expensive_work() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let vault = store.create("Protected".into(), PASSWORD.into()).unwrap();
+        store.lock().unwrap();
+        let path = store.file_path(&vault.id).unwrap();
+        let mut record: VaultRecord = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        record.kdf.m_cost = u32::MAX;
+        fs::write(&path, serde_json::to_vec(&record).unwrap()).unwrap();
+        assert_eq!(
+            store.unlock(vault.id, PASSWORD.into()).unwrap_err().code,
+            "unsupported_kdf"
+        );
+    }
+}

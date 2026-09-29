@@ -1,145 +1,112 @@
 # Black Vault
 
-Black Vault is a security-focused file encryption and transfer platform designed for handling sensitive files with privacy and security as first-class requirements.
+**Black Vault is an offline-first, security-focused desktop vault for sensitive files.** The active product is a standalone macOS application built with Tauri 2, Rust, React 19, Vite, TypeScript and Tailwind CSS. Cryptographic operations and key material remain in Rust, behind a restricted native-command boundary.
 
-The project is being built as a full-stack application with a Rust backend and a Next.js frontend. The long-term goal is to provide a controlled environment where users can securely encrypt, upload, store, transfer and decrypt sensitive files without exposing plaintext data unnecessarily to the server.
+> **Status — 29 September 2026:** Sprint 01 desktop foundation and the first Sprint 02 local vault lifecycle are implemented. You can create, list, unlock and lock encrypted vault headers. **Encrypted file import, storage and export are not yet implemented.** This is a development build, not a production-ready vault. See [Sprint 02](docs/SPRINT_02_VAULT_FOUNDATION.md).
 
-> **Project status (28 September 2026):** Rust ↔ TypeScript cryptographic compatibility verified. Vault creation, unlocking and locking are implemented, alongside version 2 client-encrypted file upload and retrieval (5 MiB limit). See [the dated development report](docs/28thSept2026_notes.md) for test results, format details and remaining work.
+## Current capabilities
 
----
+| Area | Status |
+| --- | --- |
+| Standalone macOS Apple Silicon desktop app | Implemented; local ad-hoc signed bundle |
+| Native file picker | Implemented; returns basename and size only, not file contents |
+| Local vault creation and listing | Implemented |
+| Password-based unlock and explicit lock | Implemented |
+| Independent per-vault master keys | Implemented; keys remain in Rust |
+| Encrypted vault display names | Implemented; hidden while locked |
+| Encrypted file import, storage and export | **Not implemented** |
+| Encrypted metadata database and crash recovery | **Not implemented** |
+| Recovery keys, file sharing, LAN/cloud, durable audit | **Not implemented** |
+| Developer ID signing, notarisation and native UI acceptance | Outstanding |
 
-## Table of Contents
+### What is protected today?
 
-- [Project Aim](#project-aim)
-- [Expected Outcome](#expected-outcome)
-- [Core Principles](#core-principles)
-- [Architecture](#architecture)
-- [Technology Stack](#technology-stack)
-- [Current Features](#current-features)
-- [Authentication](#authentication)
-- [API](#api)
-- [Frontend](#frontend)
-- [Security Model](#security-model)
-- [Planned Encryption Workflow](#planned-encryption-workflow)
-- [Docker and Deployment](#docker-and-deployment)
-- [Project Structure](#project-structure)
-- [Environment Configuration](#environment-configuration)
-- [Running the Project](#running-the-project)
-- [Testing](#testing)
-- [Development Principles](#development-principles)
-- [Roadmap](#roadmap)
-- [Expected Final Product](#expected-final-product)
-- [Licence](#licence)
+Each vault has an independently generated random 256-bit master key. A password-derived key (Argon2id v19; 19,456 KiB memory, 2 iterations, parallelism 1) wraps the master key and vault display name using AES-256-GCM, with a random nonce and vault-bound authenticated associated data. Only the versioned encrypted header and non-secret KDF information are persisted under Tauri's local application-data directory. One vault can be unlocked at a time; explicit locking releases the Rust-held master key with best-effort zeroisation. JavaScript receives only authorised display information.
 
----
+**Important:** selecting a file does not currently encrypt, copy, upload or save it. There is no password-recovery mechanism yet, so do not put irreplaceable data in this build. Best-effort memory clearing cannot protect an unlocked application from a compromised host, and authenticated encryption alone cannot detect rollback or deletion of every local copy.
 
-## Project Aim
+## Run the desktop application
 
-The aim of Black Vault is to build a secure, modern platform for protecting and transferring sensitive files.
+**Prerequisites:** macOS 13.3+, Apple command-line developer tools, Rust 1.90+ and Node.js 22.12+ with npm. Initial development targets Apple Silicon; Intel/universal builds need separate validation. No API, account, PostgreSQL, Docker or internet service is required to operate the desktop application.
 
-The system should minimise unnecessary exposure of plaintext information and use strong cryptographic and application-security practices throughout the entire lifecycle of a file.
+From the repository root:
 
-The platform is intended to provide:
+~~~bash
+cd desktop
+npm ci
+npm run desktop:dev
+~~~
 
-- Secure user authentication
-- Strong password protection
-- Secure file encryption and decryption
-- Controlled file uploads and downloads
-- Secure file sharing and transfer
-- Protected storage
-- Clear ownership and access controls
-- Auditable security events
-- A simple and professional security-focused user interface
-- A deployment model suitable for containerised environments
+A browser-only Vite preview cannot access native commands. Use the Tauri window for the picker and vault lifecycle.
 
-Security is not intended to be added after the application is built. It is a core architectural requirement.
+Build the local macOS application:
 
----
+~~~bash
+cd desktop
+npm run desktop:build
+open "src-tauri/target/release/bundle/macos/Black Vault.app"
+~~~
 
-## Expected Outcome
+The local bundle is ad-hoc signed, **not** Developer ID signed or notarised for distribution. See [desktop/README.md](desktop/README.md) for setup, IPC contract and release notes.
 
-The finished Black Vault platform should allow an authenticated user to:
+## Verification
 
-1. Create and securely access an account.
-2. Upload a sensitive file.
-3. Encrypt the file using strong modern cryptography.
-4. Store or transfer the encrypted file without unnecessarily exposing plaintext.
-5. Control who can access a protected file.
-6. Download an encrypted file.
-7. Decrypt the file when authorised.
-8. Remove files securely.
-9. Manage their account and protected resources.
-10. Understand the security state of their files through a clear interface.
+The latest desktop checks completed on 29 September 2026:
 
-The final product should feel like a serious security tool rather than a generic SaaS application.
+- **11 Rust tests passed** (including encrypted-header persistence, wrong passwords, tamper/cross-vault rejection, lock/reopen and shared Argon2id fixtures).
+- **12 frontend tests passed** (including native-command contract, vault controls and file-picker behaviour).
+- Rust formatting and strict Clippy checks, TypeScript type-check, frontend production build and native macOS app build passed.
+- Native end-to-end manual acceptance remains outstanding; the application has not been notarised.
 
----
+To rerun from desktop/:
 
-## Core Principles
+~~~bash
+npm run typecheck
+npm test
+npm run build
+npm run test:rust
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+npm run desktop:build
+~~~
 
-### Security First
+## Repository layout
 
-Every feature should be considered from a security perspective before implementation.
+~~~text
+black-vault/
+├── desktop/          Active offline-first Tauri + React + Rust application
+├── backend/          Preserved legacy Rust/Axum implementation and crypto reference
+├── frontend/         Preserved legacy Next.js web application
+├── tests/fixtures/   Shared cryptographic compatibility vectors
+└── docs/             Architecture, sprint records, engineering rules and history
+~~~
 
-### Least Privilege
+The previous browser/server version supported authenticated vault workflows and version 2 client-encrypted file upload/retrieval (5 MiB limit). **That is historical web functionality, not a capability of the new desktop application.** The legacy applications and fixtures remain available for reference and regression checks; do not silently reinterpret their encryption envelopes or remove them during migration.
 
-Users, services and database operations should have only the access they require.
+## Architecture and direction
 
-### Defence in Depth
+The active desktop design separates the React interface from the Rust security boundary. Tauri capabilities permit only the main local window to invoke an explicit command allow-list. Rust owns the vault lifecycle, password derivation, master keys and local encrypted headers. No remote API is needed.
 
-Security should not depend on a single mechanism. Authentication, authorisation, validation, encryption, secure transport, database constraints and logging should work together.
+The longer-term direction is independently encrypted vault environments, per-file data-encryption keys, authenticated file/filename encryption, local encrypted metadata, robust atomic checkpoints, recovery and controlled sharing. The proposed in-memory SQLite approach must be tested for plaintext disk leakage before adoption. Independent keys within one process provide **cryptographic separation, not OS- or hypervisor-level isolation**.
 
-### Minimise Plaintext Exposure
+### Next steps
 
-Sensitive plaintext data should exist only where it is required and for as short a period as practical.
+1. Implement versioned per-file keys and authenticated encrypted import/export, revalidating native picker-authorised file access.
+2. Add crash-safe writes, cleanup and negative security tests.
+3. Evaluate encrypted metadata persistence and prove no plaintext SQLite temporary, journal or WAL leakage.
+4. Manually test the native lifecycle across application restart, incorrect password and lock/unlock.
+5. Design recovery and audit before production use; complete Developer ID signing/notarisation for distribution.
 
-### Fail Securely
+## Documentation
 
-Unexpected failures should not accidentally grant access to protected resources.
+- [Desktop development and commands](desktop/README.md)
+- [Project summary](docs/PROJECT_SUMMARY.md)
+- [Desktop-first architecture](docs/Architecture.md)
+- [Proposed desktop security architecture](docs/DESKTOP_SECURITY_ARCHITECTURE.md)
+- [Sprint 01 — Desktop foundation](docs/SPRINT_01_DESKTOP_FOUNDATION.md)
+- [Sprint 02 — Vault foundation](docs/SPRINT_02_VAULT_FOUNDATION.md)
+- [Engineering and agent rules](docs/AGENTS.md)
+- [Historical web-era encryption design](docs/Encryption_Architecture.md)
+- [Historical project handover](docs/PROJECT_HANDOVER.md)
 
-### No Security by Obscurity
-
-Security should come from sound cryptographic and architectural design rather than hiding URLs, endpoints or implementation details.
-
-### Clear Separation of Responsibilities
-
-The frontend, API, authentication layer, business logic, database and cryptographic operations should have clearly defined responsibilities.
-
----
-
-## Architecture
-
-Black Vault is being designed as a full-stack application:
-
-```text
-┌─────────────────────────────┐
-│        Next.js Frontend     │
-│                             │
-│  Authentication             │
-│  File management UI         │
-│  Upload / download          │
-│  Security status            │
-└──────────────┬──────────────┘
-               │
-               │ HTTPS / API
-               ▼
-┌─────────────────────────────┐
-│        Rust API             │
-│          Axum               │
-│                             │
-│  Authentication             │
-│  Authorisation              │
-│  File operations            │
-│  Validation                 │
-│  Security controls          │
-└──────────────┬──────────────┘
-               │
-       ┌───────┴────────┐
-       ▼                ▼
-┌──────────────┐  ┌──────────────┐
-│ PostgreSQL   │  │ File/Object  │
-│              │  │ Storage      │
-│ Users        │  │ Encrypted    │
-│ Metadata     │  │ Files        │
-│ Permissions  │  │              │
-└──────────────┘  └──────────────┘
+Development is ongoing. Treat security claims as bounded by implemented behaviour and verified tests, not by planned features.

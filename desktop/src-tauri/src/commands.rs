@@ -161,8 +161,12 @@ mod tests {
     }
     #[test]
     fn ipc_allows_only_the_main_local_window() {
+        let temporary = tempfile::tempdir().unwrap();
         let app = tauri::test::mock_builder()
-            .invoke_handler(tauri::generate_handler![get_desktop_info])
+            .manage(crate::vault::VaultStore::new(
+                temporary.path().join("vaults"),
+            ))
+            .invoke_handler(tauri::generate_handler![get_desktop_info, list_vaults])
             .build(crate::context())
             .unwrap();
         for (label, origin, allowed) in [
@@ -175,25 +179,65 @@ mod tests {
                     .build()
                     .unwrap()
             });
-            let result = tauri::test::get_ipc_response(
-                &window,
-                tauri::webview::InvokeRequest {
-                    cmd: "get_desktop_info".into(),
-                    callback: tauri::ipc::CallbackFn(0),
-                    error: tauri::ipc::CallbackFn(1),
-                    url: origin.parse().unwrap(),
-                    body: tauri::ipc::InvokeBody::default(),
-                    headers: Default::default(),
-                    invoke_key: tauri::test::INVOKE_KEY.to_string(),
-                },
-            );
-            assert_eq!(result.is_ok(), allowed, "Unexpected IPC access for {label}");
-            if allowed {
-                assert_eq!(
-                    result.unwrap().deserialize::<serde_json::Value>().unwrap()["appName"],
-                    "Black Vault"
+            for command in ["get_desktop_info", "list_vaults"] {
+                let result = tauri::test::get_ipc_response(
+                    &window,
+                    tauri::webview::InvokeRequest {
+                        cmd: command.into(),
+                        callback: tauri::ipc::CallbackFn(0),
+                        error: tauri::ipc::CallbackFn(1),
+                        url: origin.parse().unwrap(),
+                        body: tauri::ipc::InvokeBody::default(),
+                        headers: Default::default(),
+                        invoke_key: tauri::test::INVOKE_KEY.to_string(),
+                    },
                 );
+                assert_eq!(
+                    result.is_ok(),
+                    allowed,
+                    "Unexpected {command} IPC access for {label}"
+                );
+                if allowed {
+                    let value = result.unwrap().deserialize::<serde_json::Value>().unwrap();
+                    if command == "get_desktop_info" {
+                        assert_eq!(value["appName"], "Black Vault");
+                    } else {
+                        assert_eq!(value, json!([]));
+                    }
+                }
             }
         }
     }
+}
+
+#[tauri::command]
+pub fn list_vaults(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+) -> Result<Vec<crate::vault::VaultSummary>, crate::vault::VaultError> {
+    store.list()
+}
+
+#[tauri::command]
+pub fn create_vault(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    name: String,
+    password: String,
+) -> Result<crate::vault::VaultSummary, crate::vault::VaultError> {
+    store.create(name, password)
+}
+
+#[tauri::command]
+pub fn unlock_vault(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    vault_id: String,
+    password: String,
+) -> Result<crate::vault::VaultSummary, crate::vault::VaultError> {
+    store.unlock(vault_id, password)
+}
+
+#[tauri::command]
+pub fn lock_vault(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+) -> Result<(), crate::vault::VaultError> {
+    store.lock()
 }

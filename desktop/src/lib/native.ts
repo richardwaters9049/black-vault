@@ -10,20 +10,34 @@ export interface SelectedFile {
   name: string;
   sizeBytes: number;
 }
+export interface VaultSummary {
+  id: string;
+  // Names are encrypted on disk and returned only for an unlocked vault.
+  name: string | null;
+  isLocked: boolean;
+}
 export interface NativeError { code: string; message: string }
 
 interface Commands {
   get_desktop_info: DesktopInfo;
   select_file: SelectedFile | null;
+  list_vaults: VaultSummary[];
+  create_vault: VaultSummary;
+  unlock_vault: VaultSummary;
+  lock_vault: void;
 }
 
-function call<K extends keyof Commands>(command: K): Promise<Commands[K]> {
+function call<K extends keyof Commands>(command: K, args?: Record<string, unknown>): Promise<Commands[K]> {
   if (!isTauri()) return Promise.reject(new Error('Open Black Vault as a desktop application to use native features.'));
-  return invoke<Commands[K]>(command);
+  return invoke<Commands[K]>(command, args);
 }
 export const native = {
   getDesktopInfo: () => call('get_desktop_info'),
   selectFile: () => call('select_file'),
+  listVaults: () => call('list_vaults'),
+  createVault: (name: string, password: string) => call('create_vault', { name, password }),
+  unlockVault: (vaultId: string, password: string) => call('unlock_vault', { vaultId, password }),
+  lockVault: () => call('lock_vault'),
 };
 
 export function errorMessage(error: unknown): string {

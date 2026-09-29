@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-desktop",
-  "description": "Allow the main local window to report application details and request a native file selection.",
+  "description": "Allow the main local window to use local vault lifecycle commands and native file selection.",
   "windows": ["main"],
-  "permissions": ["allow-get-desktop-info", "allow-select-file"]
+  "permissions": ["allow-get-desktop-info", "allow-select-file", "allow-list-vaults", "allow-create-vault", "allow-unlock-vault", "allow-lock-vault"]
 }

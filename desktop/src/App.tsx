@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight, Check, File, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole, ShieldCheck, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import VaultWorkspace from '@/components/VaultWorkspace';
 import AuthGate from '@/components/AuthGate';
 import SplashScreen from '@/components/SplashScreen';
+import { DEFAULT_IDLE_MS, hasSessionExpired } from '@/lib/sessionTimeout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { errorMessage, formatFileSize, native, type DesktopInfo, type SelectedFile, type VaultSummary } from '@/lib/native';
 
@@ -15,6 +16,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const locking = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -27,13 +29,38 @@ export default function App() {
   }, []);
 
   async function signOut() {
+    if (locking.current) return;
+    locking.current = true;
     setBusy(true); setError('');
     try {
       await native.lockVault();
       setSession(null); setFile(null); setNotice('');
     } catch (reason) { setError(errorMessage(reason)); }
-    finally { setBusy(false); }
+    finally { setBusy(false); locking.current = false; }
   }
+
+  useEffect(() => {
+    if (!session) return;
+    let lastActivity = Date.now();
+    const expire = () => {
+      if (locking.current || !hasSessionExpired(lastActivity, Date.now())) return;
+      void signOut();
+    };
+    const activity = () => {
+      // A delayed event after sleep must not extend an already expired session.
+      if (hasSessionExpired(lastActivity, Date.now())) { expire(); return; }
+      lastActivity = Date.now();
+    };
+    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+    for (const event of events) window.addEventListener(event, activity, { passive: true });
+    window.addEventListener('focus', expire);
+    const interval = window.setInterval(expire, 1000);
+    return () => {
+      window.clearInterval(interval);
+      for (const event of events) window.removeEventListener(event, activity);
+      window.removeEventListener('focus', expire);
+    };
+  }, [session]);
 
   async function selectFile() {
     setBusy(true); setError(''); setNotice('');
@@ -109,7 +136,7 @@ export default function App() {
       </section>
       {error && <p role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/5 px-4 py-3 text-sm text-red-300">{error}</p>}
       <p role="status" className="mt-4 flex items-center gap-2 text-xs text-slate-400">{notice && <><Check size={14} className="text-emerald-400" />{notice}</>}</p>
-      <footer className="mt-8 flex flex-wrap justify-between gap-2 border-t border-border pt-5 font-mono text-[10px] uppercase tracking-widest text-slate-600"><span>Black Vault · Desktop foundation</span><span>{info ? `${info.platform} / ${info.architecture}` : 'Native connection pending'}</span></footer>
+      <footer className="mt-8 flex flex-wrap justify-between gap-2 border-t border-border pt-5 font-mono text-[10px] uppercase tracking-widest text-slate-600"><span>Black Vault · Desktop foundation</span><span>{info ? `${info.platform} / ${info.architecture}` : 'Native connection pending'} · Auto-lock after {DEFAULT_IDLE_MS / 60000} min idle</span></footer>
     </main>
   </div>;
 }

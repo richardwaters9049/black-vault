@@ -47,7 +47,7 @@ export default function AuthGate({ onAuthenticated }: Props) {
         <form onSubmit={event => void submit(event)} className="mt-8 space-y-5">
           {creating ? <label className="block text-xs text-slate-400">Vault name
             <input aria-label="Vault name" value={name} onChange={event => setName(event.target.value)} maxLength={80} required disabled={busy}
-              autoComplete="off" className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-3 text-sm text-slate-100 outline-none focus:border-indigo-400" />
+              autoComplete="off" placeholder="Development Vault" className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-3 text-sm text-slate-100 outline-none focus:border-indigo-400" />
           </label> : <label className="block text-xs text-slate-400">Local vault
             <select aria-label="Local vault" value={selected} onChange={event => setSelected(event.target.value)} disabled={busy}
               className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-3 text-sm text-slate-100 outline-none focus:border-indigo-400">
@@ -56,7 +56,7 @@ export default function AuthGate({ onAuthenticated }: Props) {
           </label>}
           <label className="block text-xs text-slate-400">Vault password
             <input aria-label="Vault password" type="password" value={password} onChange={event => setPassword(event.target.value)}
-              autoComplete={creating ? 'new-password' : 'current-password'} minLength={creating ? 12 : undefined} required disabled={busy}
+              placeholder={creating ? 'Example: DevVault-Only-2026!' : 'Enter your existing vault password'} autoComplete={creating ? 'new-password' : 'current-password'} minLength={creating ? 12 : undefined} required disabled={busy}
               className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-3 text-sm text-slate-100 outline-none focus:border-indigo-400" />
           </label>
           {error && <p role="alert" className="rounded-lg border border-red-400/20 bg-red-400/5 p-3 text-xs text-red-300">{error}</p>}

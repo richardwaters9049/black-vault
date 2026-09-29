@@ -119,3 +119,6 @@ Selection/cancellation/rejection events go to process diagnostics without filena
 
 ### Sprint 03 — Startup and sign-in
 From the repository root use `./start.sh` to open the compiled app, `./start.sh build` to rebuild, `./start.sh dev` for Tauri development, and `./start.sh test` for desktop checks. Startup locks any previously open Rust vault before displaying a geometric splash and the vault-password sign-in screen. First-time setup creates a vault; subsequent launches require its password. Sign-out locks the Rust vault before hiding the dashboard. No separate account or online authentication is implemented. See `../docs/SPRINT_03_AUTH_EXPERIENCE.md` for acceptance and limitations.
+
+### Inactivity lock
+The React desktop session calls Rust `lock_vault` after five minutes without keyboard, pointer, wheel or touch activity. Wall-clock checking detects a delayed interval after sleep/resume, but this is not a native OS sleep listener. First-time setup includes development-only example placeholders, never prefilled credentials. See `../docs/SPRINT_04_AUTO_LOCK.md`.

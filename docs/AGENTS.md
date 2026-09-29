@@ -59,3 +59,6 @@ See [Sprint 02](SPRINT_02_VAULT_FOUNDATION.md) for current scope and [desktop se
 - Current branch: `feat/desktop-auth-experience`. Native `./start.sh` launches the compiled macOS app; `dev`, `build`, `test`, `help` are desktop commands; `legacy-start` retains Docker start.
 - React `SplashScreen` and `AuthGate` require vault-password unlock or first-time vault creation before rendering the dashboard. The Rust vault is locked on webview startup and sign-out. Do not treat the React gate as a separate security boundary or claim a multi-user login system.
 - Follow `docs/SPRINT_03_AUTH_EXPERIENCE.md`. Next: manual native acceptance, inactivity/sleep auto-lock, IPC boundary review. After each task update relevant documentation and propose a commit message in `gc "Feat/Desktop: ..."` format; do not commit/push automatically.
+
+### Sprint 04 (29/09/2026)
+Branch `feat/desktop-auto-lock`: first-time vault creation has public example placeholders, not prefilled credentials. React inactivity tracking requests Rust `lock_vault` after five minutes and checks wall-clock expiry after timer delays. Do not claim native sleep interception or per-session IPC tokens. See `docs/SPRINT_04_AUTO_LOCK.md`. Manual native acceptance remains outstanding.

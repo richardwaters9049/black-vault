@@ -30,6 +30,9 @@ export default function App() {
   const [nestedFileName, setNestedFileName] = useState('');
   const [nestedFileType, setNestedFileType] = useState('txt');
   const [nestedFileContent, setNestedFileContent] = useState('');
+  const [selectedProtectedFile, setSelectedProtectedFile] = useState<string | null>(null);
+  const [nestedEditing, setNestedEditing] = useState(false);
+  const [nestedDeleteConfirm, setNestedDeleteConfirm] = useState(false);
   const [lockIds, setLockIds] = useState<string[]>([]);
   const [lockName, setLockName] = useState('');
   const [lockPassword, setLockPassword] = useState('');
@@ -108,14 +111,50 @@ export default function App() {
     setNestedBusy(true); setNestedError('');
     try {
       const files = await native.createNestedTextFile(selectedNested, nestedPassword, name, nestedFileContent);
-      setNestedContents(files); setNestedFileName(''); setNestedFileContent('');
+      setNestedContents(files); setNestedFileName(''); setNestedFileContent(''); setSelectedProtectedFile(null); setNestedEditing(false);
       setNotice('New file encrypted directly inside the nested vault.');
     } catch (reason) { setNestedError(errorMessage(reason)); }
     finally { setNestedBusy(false); setNestedPassword(''); }
   }
 
+  const selectedProtected = nestedContents.find(file => file.id === selectedProtectedFile) ?? null;
+
+  function selectProtected(file: VaultFile) {
+    setSelectedProtectedFile(file.id); setNestedEditing(false); setNestedDeleteConfirm(false);
+    setNestedFileName(file.name.replace(/\.[^.]+$/, ''));
+    setNestedFileType(file.name.split('.').pop()?.toLowerCase() ?? 'txt');
+    setNestedFileContent(''); setNestedPassword(''); setNestedError('');
+  }
+
+  async function readProtected() {
+    if (!selectedNested || !selectedProtected || !/^[0-9]{4}$/.test(nestedPassword) || nestedBusy) return;
+    setNestedBusy(true); setNestedError('');
+    try {
+      const content = await native.readNestedTextFile(selectedNested, nestedPassword, selectedProtected.id);
+      setNestedFileContent(content); setNestedEditing(true);
+      setNotice('Authenticated document opened in the session editor.');
+    } catch (reason) { setNestedError(errorMessage(reason)); }
+    finally { setNestedPassword(''); setNestedBusy(false); }
+  }
+
+  async function manageProtected(action: 'edit' | 'delete' | 'transfer_to_parent') {
+    if (!selectedNested || !selectedProtected || !/^[0-9]{4}$/.test(nestedPassword) || nestedBusy) return;
+    if (action === 'delete' && !nestedDeleteConfirm) { setNestedDeleteConfirm(true); return; }
+    setNestedBusy(true); setNestedError('');
+    try {
+      const updated = await native.manageNestedFile(selectedNested, nestedPassword, selectedProtected.id, action,
+        action === 'edit' ? nestedFileName.trim() + '.' + nestedFileType : undefined,
+        action === 'edit' ? nestedFileContent : undefined);
+      setNestedContents(updated);
+      if (action === 'transfer_to_parent') setStoredFiles(await native.listVaultFiles());
+      setSelectedProtectedFile(null); setNestedEditing(false); setNestedDeleteConfirm(false); setNestedFileContent(''); setNestedFileName('');
+      setNotice(action === 'edit' ? 'Protected document re-encrypted and updated.' : action === 'delete' ? 'Protected file permanently deleted.' : 'Encrypted file transferred to the parent vault.');
+    } catch (reason) { setNestedError(errorMessage(reason)); }
+    finally { setNestedPassword(''); setNestedBusy(false); }
+  }
+
   function closeNested() {
-    setNestedUnlocked(false); setNestedContents([]); setNestedPassword(''); setNestedFileName(''); setNestedFileContent(''); setNestedError('');
+    setNestedUnlocked(false); setNestedContents([]); setNestedPassword(''); setNestedFileName(''); setNestedFileContent(''); setNestedError(''); setSelectedProtectedFile(null); setNestedEditing(false); setNestedDeleteConfirm(false);
   }
 
   async function signOut() {
@@ -255,21 +294,44 @@ export default function App() {
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="flex items-center gap-2 text-sm font-medium"><FolderOpen size={16} className="text-sky-300"/> Protected files <span className="ml-auto font-mono text-xs text-slate-500">{nestedContents.length}/5</span></h2>
             <p className="mt-2 text-xs text-slate-400">These encrypted envelopes are stored inside this compartment, not alongside parent-vault files.</p>
-            <div className="mt-4 space-y-2">{nestedContents.map(file => <div key={file.id} className="bv-premium-enter flex items-center gap-3 rounded-lg border border-border bg-background p-3 text-xs"><Lock size={14} className="shrink-0 text-sky-300"/><span className="min-w-0 flex-1 break-all">{file.name}</span><span className="font-mono text-slate-500">{(file.sizeBytes / 1024).toFixed(1)} KiB</span></div>)}</div>
+            <div className="mt-4 space-y-2">{nestedContents.map(file => <button type="button" key={file.id} onClick={() => selectProtected(file)} aria-pressed={selectedProtectedFile === file.id} className={"bv-premium-enter flex w-full items-center gap-3 rounded-lg border p-3 text-left text-xs transition-colors " + (selectedProtectedFile === file.id ? 'border-sky-400/50 bg-sky-400/10 text-sky-100' : 'border-border bg-background hover:border-sky-400/30')}><Lock size={14} className="shrink-0 text-sky-300"/><span className="min-w-0 flex-1 break-all">{file.name}</span><span className="shrink-0 font-mono text-slate-500">{(file.sizeBytes / 1024).toFixed(1)} KiB</span></button>)}</div>
             {nestedContents.length === 0 && <p className="mt-5 text-xs text-slate-500">No files in this compartment yet.</p>}
             <p className="mt-5 text-[11px] leading-5 text-slate-500">To restore all files to the parent vault, lock this compartment and use the restore control in My Vault. No plaintext export is required.</p>
           </div>
-          <form onSubmit={event => void createNestedFile(event)} className="rounded-xl border border-border bg-card p-5">
-            <h2 className="flex items-center gap-2 text-sm font-medium"><FilePlus2 size={16} className="text-sky-300"/> Create inside this vault</h2>
-            <p className="mt-2 text-xs text-slate-400">The new file is encrypted and added to the nested container. Re-enter your PIN to authorise each write.</p>
-            <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_90px]">
-              <input aria-label="Nested filename" required maxLength={100} value={nestedFileName} onChange={event => setNestedFileName(event.target.value)} placeholder="Document name" className="min-w-0 rounded-lg border border-border bg-background p-3 text-xs"/>
-              <select aria-label="Nested file type" value={nestedFileType} onChange={event => setNestedFileType(event.target.value)} className="rounded-lg border border-border bg-background p-3 text-xs">{['txt','md','json','csv','log'].map(ext => <option key={ext} value={ext}>.{ext}</option>)}</select>
-            </div>
-            <textarea aria-label="Nested file contents" rows={9} maxLength={5 * 1024 * 1024} value={nestedFileContent} onChange={event => setNestedFileContent(event.target.value)} placeholder="Write your secure document…" className="mt-3 w-full resize-y rounded-lg border border-border bg-[#080f1a] p-3 font-mono text-xs leading-6 outline-none focus:border-sky-400"/>
-            <input aria-label="Confirm nested vault PIN" type="password" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" placeholder="Confirm 4-digit PIN" value={nestedPassword} onChange={event => setNestedPassword(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="mt-3 w-full rounded-lg border border-border bg-background p-3 text-xs tracking-[0.25em]"/>
-            <Button type="submit" className="mt-4" disabled={nestedBusy || nestedContents.length >= 5 || !nestedFileName.trim() || !/^[0-9]{4}$/.test(nestedPassword)}>{nestedBusy ? 'Encrypting…' : 'Encrypt into nested vault'}</Button>
-          </form>
+          <div className="rounded-xl border border-border bg-card p-5">
+            {selectedProtected ? <div className="space-y-4">
+              <h2 className="flex items-center gap-2 text-sm font-medium"><File size={16} className="text-sky-300"/> Protected file details</h2>
+              <dl className="grid gap-3 rounded-lg border border-border bg-background p-4 text-xs">
+                <div><dt className="text-slate-500">Filename</dt><dd className="mt-1 break-all text-slate-100">{selectedProtected.name}</dd></div>
+                <div><dt className="text-slate-500">Size</dt><dd className="mt-1 font-mono">{selectedProtected.sizeBytes.toLocaleString()} bytes</dd></div>
+                <div><dt className="text-slate-500">File ID</dt><dd className="mt-1 break-all font-mono text-[11px]">{selectedProtected.id}</dd></div>
+                <div><dt className="text-slate-500">Protection</dt><dd className="mt-1 text-sky-300">Parent encryption + nested PIN layer</dd></div>
+              </dl>
+              {nestedEditing && <div className="grid gap-3">
+                <div className="grid gap-2 sm:grid-cols-[1fr_90px]"><input aria-label="Edit protected filename" value={nestedFileName} maxLength={100} onChange={event => setNestedFileName(event.target.value)} className="min-w-0 rounded-lg border border-border bg-background p-3 text-xs"/><select aria-label="Edit protected file type" value={nestedFileType} onChange={event => setNestedFileType(event.target.value)} className="rounded-lg border border-border bg-background p-3 text-xs">{['txt','md','json','csv','log'].map(ext => <option key={ext} value={ext}>.{ext}</option>)}</select></div>
+                <textarea aria-label="Edit protected file contents" value={nestedFileContent} onChange={event => setNestedFileContent(event.target.value)} rows={9} spellCheck={false} className="w-full resize-y rounded-lg border border-border bg-[#080f1a] p-3 font-mono text-xs leading-6"/>
+              </div>}
+              <p className="text-[11px] leading-5 text-slate-500">Re-enter the four-digit PIN to authorise each read or change. File content is never exported to disk.</p>
+              <input aria-label="Protected file operation PIN" type="password" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" placeholder="Confirm 4-digit PIN" value={nestedPassword} onChange={event => setNestedPassword(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="w-full rounded-lg border border-border bg-background p-3 text-xs tracking-[0.25em]"/>
+              <div className="flex flex-wrap gap-2">
+                {!nestedEditing && <Button type="button" variant="outline" disabled={nestedBusy || !/^[0-9]{4}$/.test(nestedPassword)} onClick={() => void readProtected()}>Open text editor</Button>}
+                {nestedEditing && <Button type="button" disabled={nestedBusy || !nestedFileName.trim() || !/^[0-9]{4}$/.test(nestedPassword)} onClick={() => void manageProtected('edit')}>Save encrypted changes</Button>}
+                <Button type="button" variant="outline" disabled={nestedBusy || !/^[0-9]{4}$/.test(nestedPassword)} onClick={() => void manageProtected('transfer_to_parent')}>Move to parent</Button>
+                <Button type="button" variant="outline" disabled={nestedBusy || !/^[0-9]{4}$/.test(nestedPassword)} onClick={() => void manageProtected('delete')}>{nestedDeleteConfirm ? 'Confirm permanent delete' : 'Delete file'}</Button>
+                <Button type="button" variant="outline" onClick={() => { setSelectedProtectedFile(null); setNestedEditing(false); setNestedFileContent(''); setNestedPassword(''); setNestedDeleteConfirm(false); }}>Close details</Button>
+              </div>
+            </div> : <form onSubmit={event => void createNestedFile(event)}>
+              <h2 className="flex items-center gap-2 text-sm font-medium"><FilePlus2 size={16} className="text-sky-300"/> Create inside this vault</h2>
+              <p className="mt-2 text-xs text-slate-400">Select a protected file on the left to view its information and actions here, or create a new encrypted document.</p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_90px]">
+                <input aria-label="Nested filename" required maxLength={100} value={nestedFileName} onChange={event => setNestedFileName(event.target.value)} placeholder="Document name" className="min-w-0 rounded-lg border border-border bg-background p-3 text-xs"/>
+                <select aria-label="Nested file type" value={nestedFileType} onChange={event => setNestedFileType(event.target.value)} className="rounded-lg border border-border bg-background p-3 text-xs">{['txt','md','json','csv','log'].map(ext => <option key={ext} value={ext}>.{ext}</option>)}</select>
+              </div>
+              <textarea aria-label="Nested file contents" rows={9} maxLength={5 * 1024 * 1024} value={nestedFileContent} onChange={event => setNestedFileContent(event.target.value)} placeholder="Write your secure document…" className="mt-3 w-full resize-y rounded-lg border border-border bg-[#080f1a] p-3 font-mono text-xs leading-6 outline-none focus:border-sky-400"/>
+              <input aria-label="Confirm nested vault PIN" type="password" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" placeholder="Confirm 4-digit PIN" value={nestedPassword} onChange={event => setNestedPassword(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="mt-3 w-full rounded-lg border border-border bg-background p-3 text-xs tracking-[0.25em]"/>
+              <Button type="submit" className="mt-4" disabled={nestedBusy || nestedContents.length >= 5 || !nestedFileName.trim() || !/^[0-9]{4}$/.test(nestedPassword)}>{nestedBusy ? 'Encrypting…' : 'Encrypt into nested vault'}</Button>
+            </form>}
+          </div>
         </div>}
         {nestedError && <p role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/5 p-3 text-xs text-red-300">{nestedError}</p>}
       </section>}

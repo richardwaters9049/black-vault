@@ -20,6 +20,8 @@ fn main() {
             "create_nested_text_file",
             "create_vault_text_file",
             "read_vault_text_file",
+            "update_vault_text_file",
+            "delete_vault_file",
             "decrypt_vault_file",
             "export_vault_file",
         ]),

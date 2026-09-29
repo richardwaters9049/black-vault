@@ -40,6 +40,8 @@ interface Commands {
   create_nested_text_file: VaultFile[];
   create_vault_text_file: VaultFile;
   read_vault_text_file: string;
+  update_vault_text_file: VaultFile;
+  delete_vault_file: void;
   decrypt_vault_file: VaultFile;
   export_vault_file: VaultFile | null;
 }
@@ -68,6 +70,8 @@ export const native = {
   restoreNestedVault: (nestedId: string, password: string) => call('restore_nested_vault', { nestedId, password }),
   createVaultTextFile: (name: string, content: string) => call('create_vault_text_file', { name, content }),
   readVaultTextFile: (fileId: string) => call('read_vault_text_file', { fileId }),
+  updateVaultTextFile: (fileId: string, name: string, content: string) => call('update_vault_text_file', { fileId, name, content }),
+  deleteVaultFile: (fileId: string) => call('delete_vault_file', { fileId }),
   decryptVaultFile: (fileId: string) => call('decrypt_vault_file', { fileId }),
   exportVaultFile: (fileId: string) => call('export_vault_file', { fileId }),
 };

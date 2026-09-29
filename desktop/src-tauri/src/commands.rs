@@ -241,3 +241,75 @@ pub fn lock_vault(
 ) -> Result<(), crate::vault::VaultError> {
     store.lock()
 }
+
+#[tauri::command]
+pub async fn import_vault_file(
+    app: tauri::AppHandle,
+) -> Result<Option<crate::file_crypto::VaultFile>, crate::vault::VaultError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let picker = app.state::<PickerState>();
+        let _picker_guard = picker
+            .0
+            .try_lock()
+            .map_err(|_| crate::vault::VaultError::picker_busy())?;
+        // A path is never supplied by JavaScript. Selection and import occur in this command.
+        let selected = app
+            .dialog()
+            .file()
+            .set_title("Import into unlocked vault")
+            .blocking_pick_file();
+        let Some(selected) = selected else {
+            return Ok(None);
+        };
+        let path = selected
+            .into_path()
+            .map_err(|_| crate::vault::VaultError::file_unavailable())?;
+        app.state::<crate::vault::VaultStore>()
+            .import_path(&path)
+            .map(Some)
+    })
+    .await
+    .map_err(|_| crate::vault::VaultError::storage_error())?
+}
+
+#[tauri::command]
+pub fn list_vault_files(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+) -> Result<Vec<crate::file_crypto::VaultFile>, crate::vault::VaultError> {
+    store.list_files()
+}
+
+#[tauri::command]
+pub async fn export_vault_file(
+    app: tauri::AppHandle,
+    file_id: String,
+) -> Result<Option<crate::file_crypto::VaultFile>, crate::vault::VaultError> {
+    if !crate::file_crypto::valid_id(&file_id) {
+        return Err(crate::vault::VaultError::file_invalid());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let picker = app.state::<PickerState>();
+        let _picker_guard = picker
+            .0
+            .try_lock()
+            .map_err(|_| crate::vault::VaultError::picker_busy())?;
+        // The user chooses an explicit new destination; existing files are never overwritten.
+        let selected = app
+            .dialog()
+            .file()
+            .set_title("Export decrypted file (choose a new filename)")
+            .set_file_name(format!("{file_id}.export"))
+            .blocking_save_file();
+        let Some(selected) = selected else {
+            return Ok(None);
+        };
+        let path = selected
+            .into_path()
+            .map_err(|_| crate::vault::VaultError::file_unavailable())?;
+        app.state::<crate::vault::VaultStore>()
+            .export_path(&file_id, &path)
+            .map(Some)
+    })
+    .await
+    .map_err(|_| crate::vault::VaultError::storage_error())?
+}

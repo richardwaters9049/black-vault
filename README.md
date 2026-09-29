@@ -2,7 +2,7 @@
 
 **Black Vault is an offline-first, security-focused desktop vault for sensitive files.** The active product is a standalone macOS application built with Tauri 2, Rust, React 19, Vite, TypeScript and Tailwind CSS. Cryptographic operations and key material remain in Rust, behind a restricted native-command boundary.
 
-> **Status — 29 September 2026:** Sprint 01 desktop foundation and the first Sprint 02 local vault lifecycle are implemented. You can create, list, unlock and lock encrypted vault headers. **Encrypted file import, storage and export are not yet implemented.** This is a development build, not a production-ready vault. See [Sprint 02](docs/SPRINT_02_VAULT_FOUNDATION.md).
+> **Status — 29 September 2026:** Sprint 01 desktop foundation and the Sprint 02 vault lifecycle plus bounded encrypted file-storage slice are implemented. You can create, list, unlock and lock vaults, then import, list and explicitly export encrypted files. File import is currently limited to **5 MiB per file**. This is a development build, not a production-ready vault. See [Sprint 02](docs/SPRINT_02_VAULT_FOUNDATION.md).
 
 ## Current capabilities
 
@@ -14,16 +14,16 @@
 | Password-based unlock and explicit lock | Implemented |
 | Independent per-vault master keys | Implemented; keys remain in Rust |
 | Encrypted vault display names | Implemented; hidden while locked |
-| Encrypted file import, storage and export | **Not implemented** |
+| Encrypted file import, storage and export | Implemented for files up to 5 MiB; native picker only |
 | Encrypted metadata database and crash recovery | **Not implemented** |
 | Recovery keys, file sharing, LAN/cloud, durable audit | **Not implemented** |
 | Developer ID signing, notarisation and native UI acceptance | Outstanding |
 
 ### What is protected today?
 
-Each vault has an independently generated random 256-bit master key. A password-derived key (Argon2id v19; 19,456 KiB memory, 2 iterations, parallelism 1) wraps the master key and vault display name using AES-256-GCM, with a random nonce and vault-bound authenticated associated data. Only the versioned encrypted header and non-secret KDF information are persisted under Tauri's local application-data directory. One vault can be unlocked at a time; explicit locking releases the Rust-held master key with best-effort zeroisation. JavaScript receives only authorised display information.
+Each vault has an independently generated random 256-bit master key. A password-derived key (Argon2id v19; 19,456 KiB memory, 2 iterations, parallelism 1) wraps the master key and vault display name using AES-256-GCM, with a random nonce and vault-bound authenticated associated data. The versioned encrypted header, non-secret KDF information and separately authenticated per-file envelopes are persisted under Tauri's local application-data directory. Each imported file has a fresh random 256-bit DEK wrapped under the active vault master key; the filename and contents are encrypted together. One vault can be unlocked at a time; explicit locking releases the Rust-held master key with best-effort zeroisation. JavaScript receives only authorised display information.
 
-**Important:** selecting a file does not currently encrypt, copy, upload or save it. There is no password-recovery mechanism yet, so do not put irreplaceable data in this build. Best-effort memory clearing cannot protect an unlocked application from a compromised host, and authenticated encryption alone cannot detect rollback or deletion of every local copy.
+**Important:** the original metadata-only file picker still only previews a file; use **Import and encrypt** inside an unlocked vault to store an authenticated encrypted copy. Export explicitly writes a new plaintext file and refuses to overwrite an existing destination. There is no password-recovery mechanism yet, so do not put irreplaceable data in this build. Best-effort memory clearing cannot protect an unlocked application from a compromised host, and authenticated encryption alone cannot detect rollback or deletion of every local copy.
 
 ## Run the desktop application
 
@@ -53,8 +53,8 @@ The local bundle is ad-hoc signed, **not** Developer ID signed or notarised for 
 
 The latest desktop checks completed on 29 September 2026:
 
-- **11 Rust tests passed** (including encrypted-header persistence, wrong passwords, tamper/cross-vault rejection, lock/reopen and shared Argon2id fixtures).
-- **12 frontend tests passed** (including native-command contract, vault controls and file-picker behaviour).
+- **18 Rust tests passed** (including encrypted-header persistence, wrong passwords, tamper/cross-vault rejection, lock/reopen and shared Argon2id fixtures).
+- **14 frontend tests passed** (including native-command contract, vault controls and file-picker behaviour).
 - Rust formatting and strict Clippy checks, TypeScript type-check, frontend production build and native macOS app build passed.
 - Native end-to-end manual acceptance remains outstanding; the application has not been notarised.
 
@@ -91,8 +91,8 @@ The longer-term direction is independently encrypted vault environments, per-fil
 
 ### Next steps
 
-1. Implement versioned per-file keys and authenticated encrypted import/export, revalidating native picker-authorised file access.
-2. Add crash-safe writes, cleanup and negative security tests.
+1. Extend the current bounded in-memory file encryption to chunked/streaming import/export and strengthen crash/recovery tests.
+2. Add durable encrypted metadata, recovery strategy and further negative security tests.
 3. Evaluate encrypted metadata persistence and prove no plaintext SQLite temporary, journal or WAL leakage.
 4. Manually test the native lifecycle across application restart, incorrect password and lock/unlock.
 5. Design recovery and audit before production use; complete Developer ID signing/notarisation for distribution.

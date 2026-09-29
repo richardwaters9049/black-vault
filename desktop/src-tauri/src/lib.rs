@@ -1,4 +1,5 @@
 mod commands;
+mod file_crypto;
 mod vault;
 
 pub(crate) fn context<R: tauri::Runtime>() -> tauri::Context<R> {
@@ -21,7 +22,10 @@ pub fn run() {
             commands::list_vaults,
             commands::create_vault,
             commands::unlock_vault,
-            commands::lock_vault
+            commands::lock_vault,
+            commands::import_vault_file,
+            commands::list_vault_files,
+            commands::export_vault_file
         ])
         .run(context())
         .expect("Unable to launch Black Vault");

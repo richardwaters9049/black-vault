@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { KeyRound, Lock, LockOpen, Plus, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import VaultFiles from './VaultFiles';
 import { errorMessage, native, type VaultSummary } from '@/lib/native';
 
 interface Props { ready: boolean }
@@ -81,6 +82,7 @@ export default function VaultWorkspace({ ready }: Props) {
           <p className="mt-2 font-mono text-[11px] text-slate-500">Vault ID: {active.id}</p>
           <p className="mt-4 max-w-sm text-xs leading-6 text-slate-400">The vault master key is held only by Rust for this session. Lock before opening another vault.</p>
           <Button className="mt-5" variant="outline" onClick={() => void lock()} disabled={busy}><Lock size={15} />{busy ? 'Locking…' : 'Lock vault'}</Button>
+          <VaultFiles vaultId={active.id} />
         </> : <>
           <h3 className="flex items-center gap-2 text-sm font-medium"><Plus size={16} /> Create a local vault</h3>
           <p className="mt-2 max-w-md text-xs leading-6 text-slate-400">Each vault receives a fresh random 256-bit master key, wrapped using Argon2id and AES-256-GCM. Its display name is encrypted too.</p>
@@ -128,7 +130,7 @@ export default function VaultWorkspace({ ready }: Props) {
     {notice && <p role="status" className="mx-6 mb-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 px-4 py-3 text-xs text-emerald-300">{notice}</p>}
     <div className="flex items-start gap-2 border-t border-border bg-[#0b111b] px-6 py-3.5 text-xs leading-5 text-slate-400">
       <ShieldCheck size={14} className="mt-0.5 shrink-0 text-blue-400" />
-      This stage saves an authenticated encrypted vault header. File import, encrypted file storage and recovery are not implemented yet.
+      Imported files are encrypted with independent keys. Password recovery, encrypted metadata database and sharing are not yet implemented.
     </div>
   </section>;
 }

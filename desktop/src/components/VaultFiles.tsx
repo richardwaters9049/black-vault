@@ -4,15 +4,22 @@ import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { CheckCircle2, Download, FileLock2, FolderPlus, LockKeyhole, ScanSearch, ShieldCheck, ShieldX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { EXAMPLE_DRAG_TYPE, examples, getActiveExampleDrag } from './ExampleFiles';
+import { EXAMPLE_DRAG_TYPE, examples, getActiveExampleDrag, getActiveDecryptDrag } from './ExampleFiles';
 import { errorMessage, formatFileSize, native, type VaultFile } from '@/lib/native';
 
 const VAULT_FILE_DRAG_TYPE = 'application/x-black-vault-encrypted-file';
 type Mode = 'encrypt' | 'decrypt';
 type Phase = 'idle' | 'working' | 'success' | 'error';
 
-export default function VaultFiles({ vaultId, chosenExample }: { vaultId: string; chosenExample?: { id: string; nonce: number } | null }) {
+export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFilesChange, onDecryptedChange }: {
+  vaultId: string;
+  chosenExample?: { id: string; nonce: number } | null;
+  chosenDecrypt?: { id: string; nonce: number } | null;
+  onFilesChange?: (files: VaultFile[]) => void;
+  onDecryptedChange?: (files: VaultFile[]) => void;
+}) {
   const [files, setFiles] = useState<VaultFile[]>([]);
+  const [decryptedFiles, setDecryptedFiles] = useState<VaultFile[]>([]);
   const [mode, setMode] = useState<Mode>('encrypt');
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
@@ -22,8 +29,8 @@ export default function VaultFiles({ vaultId, chosenExample }: { vaultId: string
   const [status, setStatus] = useState('');
   useEffect(() => {
     let mounted = true;
-    setFiles([]); setPhase('idle'); setStatus(''); setMode('encrypt'); setSelection(null);
-    native.listVaultFiles().then(items => { if (mounted) setFiles(items); })
+    setFiles([]); setDecryptedFiles([]); onDecryptedChange?.([]); setPhase('idle'); setStatus(''); setMode('encrypt'); setSelection(null);
+    native.listVaultFiles().then(items => { if (mounted) { setFiles(items); onFilesChange?.(items); } })
       .catch(reason => { if (mounted) { setPhase('error'); setStatus(errorMessage(reason)); } });
     return () => { mounted = false; };
   }, [vaultId]);
@@ -37,6 +44,22 @@ export default function VaultFiles({ vaultId, chosenExample }: { vaultId: string
     setPhase('idle');
     setStatus(found.name + ' selected. Press Encrypt to continue.');
   }, [chosenExample]);
+
+  useEffect(() => {
+    if (!chosenDecrypt) return;
+    const file = files.find(item => item.id === chosenDecrypt.id);
+    if (!file) return;
+    setMode('decrypt');
+    setSelection({ mode: 'decrypt', id: file.id, name: file.name });
+    setPhase('idle');
+    setStatus(file.name + ' selected. Press Decrypt to continue.');
+  }, [chosenDecrypt, files]);
+
+  async function refreshFiles() {
+    const items = await native.listVaultFiles();
+    setFiles(items);
+    onFilesChange?.(items);
+  }
 
   useEffect(() => {
     if (!isTauri()) { console.info('[vault-drop][ui] Native Tauri runtime not detected'); return; }
@@ -78,9 +101,21 @@ export default function VaultFiles({ vaultId, chosenExample }: { vaultId: string
     }).then(fn => { if (active) unlistenMultiple = fn; else fn(); }).catch(() => {});
     getCurrentWebview().onDragDropEvent(event => {
       if (event.payload.type !== 'over') console.info('[vault-drop][ui] webview event', { type: event.payload.type, count: 'paths' in event.payload ? event.payload.paths?.length : undefined });
-      if (!active || mode !== 'encrypt' || busy) return;
+      if (!active || busy) return;
       if (event.payload.type === 'drop') {
         setOver(false);
+        if (event.payload.paths.length === 0) {
+          const decryptId = getActiveDecryptDrag();
+          const encrypted = files.find(item => item.id === decryptId);
+          if (encrypted) {
+            setMode('decrypt');
+            setSelection({ mode: 'decrypt', id: encrypted.id, name: encrypted.name });
+            setPhase('idle');
+            setStatus(encrypted.name + ' selected. Press Decrypt to continue.');
+            console.info('[vault-drop][ui] encrypted sidebar file staged', { id: encrypted.id.slice(0, 8) });
+            return;
+          }
+        }
         // Built-in examples are virtual: Tauri receives an empty paths array
         // and WebKit may suppress the HTML drop callback entirely.
         const id = getActiveExampleDrag();
@@ -88,6 +123,7 @@ export default function VaultFiles({ vaultId, chosenExample }: { vaultId: string
           const sample = examples.find(item => item.id === id);
           if (sample) {
             console.info('[vault-drop][ui] staged internal example from native empty-path drop', { id });
+            setMode('encrypt');
             setSelection({ mode: 'encrypt', id, name: sample.name });
             setPhase('idle');
             setStatus(sample.name + ' selected. Press Encrypt to continue.');
@@ -107,11 +143,11 @@ export default function VaultFiles({ vaultId, chosenExample }: { vaultId: string
       active = false;
       unlistenDrop?.(); unlistenMultiple?.(); unlistenHover?.();
     };
-  }, [mode, busy]);
+  }, [mode, busy, files]);
 
   async function run(action: () => Promise<string | null>) {
     if (busy) return;
-    setBusy(true); setPhase('working'); setStatus(mode === 'encrypt' ? 'Scanning and encrypting locally…' : 'Decrypting and preparing export…');
+    setBusy(true); setPhase('working'); setStatus(mode === 'encrypt' ? 'Scanning and encrypting into the vault…' : 'Decrypting and verifying in secure memory…');
     try {
       const message = await action();
       if (message) { setPhase('success'); setStatus(message); }
@@ -123,22 +159,29 @@ export default function VaultFiles({ vaultId, chosenExample }: { vaultId: string
     void run(async () => {
       const imported = await native.importVaultFile();
       if (!imported) return null;
-      setFiles(await native.listVaultFiles());
-      return imported.name + ' scanned, encrypted and saved successfully. This is not antivirus clearance; the source remains unchanged.';
+      await refreshFiles();
+      return imported.name + ' scanned, encrypted and stored in the vault. The original source remains unchanged.';
     });
   }
   function importExample(id: string) {
     if (!examples.some(sample => sample.id === id)) return;
     void run(async () => {
       const imported = await native.importExampleFile(id);
-      setFiles(await native.listVaultFiles());
-      return imported.name + ' scanned, encrypted and saved in your vault.';
+      await refreshFiles();
+      return imported.name + ' scanned, encrypted and stored in your vault.';
     });
   }
-  function exportFile(id: string) {
+  function decryptFile(id: string) {
     void run(async () => {
-      const exported = await native.exportVaultFile(id);
-      return exported ? exported.name + ' decrypted and exported successfully. The exported copy is plaintext.' : null;
+      const verified = await native.decryptVaultFile(id);
+      // Rust verifies authentication in zeroising memory and retains only
+      // encrypted bytes on disk. This list is a session-only activity view.
+      setDecryptedFiles(previous => {
+        const next = [...previous.filter(file => file.id !== verified.id), verified];
+        onDecryptedChange?.(next);
+        return next;
+      });
+      return verified.name + ' decrypted and verified in memory. No plaintext file was saved. The encrypted original remains in the vault.';
     });
   }
   function dragOver(event: DragEvent<HTMLElement>) {
@@ -151,16 +194,20 @@ export default function VaultFiles({ vaultId, chosenExample }: { vaultId: string
     if (busy) return;
     const fallback = event.dataTransfer.getData('text/plain');
     const raw = event.dataTransfer.getData(mode === 'encrypt' ? EXAMPLE_DRAG_TYPE : VAULT_FILE_DRAG_TYPE);
-    const id = raw || (mode === 'encrypt' && fallback.startsWith('black-vault-example:') ? fallback.slice('black-vault-example:'.length) : mode === 'decrypt' && fallback.startsWith('black-vault-file:') ? fallback.slice('black-vault-file:'.length) : '');
-    const found = mode === 'encrypt' ? examples.find(item => item.id === id) : files.find(item => item.id === id);
+    const id = raw || (fallback.startsWith('black-vault-example:') ? fallback.slice('black-vault-example:'.length) : fallback.startsWith('black-vault-file:') ? fallback.slice('black-vault-file:'.length) : '');
+    const sample = examples.find(item => item.id === id);
+    const encrypted = files.find(item => item.id === id);
+    const found = mode === 'encrypt' ? sample ?? encrypted : encrypted ?? sample;
     if (!found) {
       // Finder drops are delivered through Tauri's native drag/drop listener,
       // not through WebKit's HTML DataTransfer payload.
       if (mode === 'encrypt') return;
       setPhase('error'); setStatus('Select an Example File in the sidebar, or drop a Finder file into Encryption.'); return;
     }
-    setSelection({ mode, id, name: found.name });
-    setPhase('idle'); setStatus(found.name + ' selected. Press ' + (mode === 'encrypt' ? 'Encrypt' : 'Decrypt') + ' to continue.');
+    const targetMode: Mode = sample ? 'encrypt' : 'decrypt';
+    setMode(targetMode);
+    setSelection({ mode: targetMode, id, name: found.name });
+    setPhase('idle'); setStatus(found.name + ' selected. Press ' + (targetMode === 'encrypt' ? 'Encrypt' : 'Decrypt') + ' to continue.');
   }
   function changeMode(next: Mode) { if (busy) return; setMode(next); setSelection(null); setOver(false); setPhase('idle'); setStatus(''); }
   function confirmSelection() {
@@ -168,11 +215,11 @@ export default function VaultFiles({ vaultId, chosenExample }: { vaultId: string
     if (mode === 'encrypt' && selection.id === 'native-drop') {
       void run(async () => {
         const imported = await native.importDroppedFile();
-        setFiles(await native.listVaultFiles());
-        return imported.name + ' scanned, encrypted and saved successfully. The source remains unchanged.';
+        await refreshFiles();
+        return imported.name + ' scanned, encrypted and stored in the vault. The source remains unchanged.';
       });
     } else if (mode === 'encrypt') importExample(selection.id);
-    else exportFile(selection.id);
+    else decryptFile(selection.id);
     setSelection(null);
   }
   return <section aria-label="File encryption and decryption" className="mt-7 border-t border-border pt-5">
@@ -198,20 +245,24 @@ export default function VaultFiles({ vaultId, chosenExample }: { vaultId: string
         </div>}
         {selection?.mode === mode ? <Button className="mt-4" disabled={busy} onClick={confirmSelection}>{busy ? 'Processing…' : mode === 'encrypt' ? 'Encrypt' : 'Decrypt'}</Button> :
           mode === 'encrypt' && <Button className="mt-5" variant="outline" disabled={busy} onClick={importFile}><FolderPlus size={14}/>{busy ? 'Processing…' : 'Choose file to encrypt'}</Button>}
-        {phase === 'working' && <div className="mx-auto mt-5 h-1 max-w-xs overflow-hidden rounded-full bg-blue-400/10"><div className="bv-operation-progress h-full w-1/3 rounded-full bg-sky-400" /></div>}
+        {phase === 'working' && <div className="mx-auto mt-5 max-w-xs" role="progressbar" aria-label={mode === 'encrypt' ? 'Encrypting file' : 'Decrypting file'}>
+          <div className="h-1 overflow-hidden rounded-full bg-blue-400/10"><div className="bv-operation-progress h-full w-1/3 rounded-full bg-sky-400" /></div>
+          <p className="mt-2 text-[11px] text-sky-300">{mode === 'encrypt' ? 'Scanning → Encrypting → Vault' : 'Authenticating → Decrypting → Verified'}</p>
+        </div>}
       </div>
       <div aria-live="polite" role={phase === 'error' ? 'alert' : 'status'} className={`mt-3 min-h-6 rounded-lg px-3 py-2 text-xs leading-5 transition-all duration-300 ${phase === 'success' ? 'bv-operation-confirm border border-emerald-400/20 bg-emerald-500/5 text-emerald-300' : phase === 'error' ? 'border border-red-400/20 bg-red-500/5 text-red-300' : 'text-slate-400'}`}>
         {phase === 'success' && <ShieldCheck size={14} className="mr-2 inline" />}{status}
       </div>
-      <div className="mt-5 flex items-center justify-between gap-3"><h4 className="flex items-center gap-2 text-xs font-medium"><FileLock2 size={14} className="text-sky-400"/> Encrypted vault files</h4><span className="font-mono text-[10px] text-slate-500">{files.length} stored</span></div>
-      {files.length === 0 ? <p className="mt-3 text-xs text-slate-500">No encrypted files yet. Start with an example or choose a file.</p> :
-        <div className="mt-3 space-y-2">{files.map(file => <div key={file.id} draggable={!busy && mode === 'decrypt'}
-          onDragStart={event => { if (mode !== 'decrypt') { event.preventDefault(); return; } event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(VAULT_FILE_DRAG_TYPE, file.id); event.dataTransfer.setData('text/plain', 'black-vault-file:' + file.id); }}
-          className={`flex flex-wrap items-center gap-3 rounded-lg border border-border bg-[#0b111b] p-3 ${mode === 'decrypt' ? 'cursor-grab active:cursor-grabbing' : ''}`}>
-          <FileLock2 size={16} className="shrink-0 text-blue-300"/><div className="min-w-0 flex-1"><p className="break-all text-xs font-medium">{file.name}</p><p className="mt-1 font-mono text-[10px] text-slate-500">{formatFileSize(file.sizeBytes)} · {file.id.slice(0,8)}</p></div>
-          {mode === 'decrypt' && <Button variant="outline" disabled={busy} onClick={() => exportFile(file.id)}><Download size={14}/>Decrypt & export</Button>}
-        </div>)}</div>}
-      <p className="mt-4 text-[11px] leading-5 text-slate-500">A completed animation confirms the native operation has returned successfully; it is not a simulated security result. Local scanning is a limited static policy check, not comprehensive malware detection. Exported files are plaintext.</p>
+      <div className="mt-5 flex items-center justify-between gap-3"><h4 className="flex items-center gap-2 text-xs font-medium"><FileLock2 size={14} className="text-sky-400"/> {mode === 'encrypt' ? 'Encrypted vault files' : 'Decrypted vault files'}</h4><span className="font-mono text-[10px] text-slate-500">{mode === 'encrypt' ? files.length + ' stored' : decryptedFiles.length + ' verified this session'}</span></div>
+      {mode === 'encrypt' ? (files.length === 0 ? <p className="mt-3 text-xs text-slate-500">No encrypted files yet. Start with an example or choose a file.</p> :
+        <div className="mt-3 space-y-2">{files.map(file => <div key={file.id} className="flex items-center gap-3 rounded-lg border border-border bg-[#0b111b] p-3">
+          <FileLock2 size={16} className="shrink-0 text-blue-300"/><div className="min-w-0 flex-1"><p className="break-all text-xs font-medium">{file.name}</p><p className="mt-1 font-mono text-[10px] text-slate-500">{formatFileSize(file.sizeBytes)} · Encrypted in vault</p></div>
+        </div>)}</div>) : (decryptedFiles.length === 0 ?
+        <p className="mt-3 text-xs leading-5 text-slate-500">No files decrypted this session. Choose a stored encrypted file from the sidebar, then press Decrypt. Plaintext is never saved to disk.</p> :
+        <div className="mt-3 space-y-2">{decryptedFiles.map(file => <div key={file.id} className="flex items-center gap-3 rounded-lg border border-emerald-400/15 bg-[#0b111b] p-3">
+          <CheckCircle2 size={16} className="shrink-0 text-emerald-300"/><div className="min-w-0 flex-1"><p className="break-all text-xs font-medium">{file.name}</p><p className="mt-1 font-mono text-[10px] text-slate-500">{formatFileSize(file.sizeBytes)} · Verified in memory · No plaintext copy</p></div>
+        </div>)}</div>)}
+      <p className="mt-4 text-[11px] leading-5 text-slate-500">A completed animation confirms the native operation has returned successfully; it is not a simulated security result. Local scanning is a limited static policy check, not comprehensive malware detection. Decryption verifies contents in zeroising Rust memory; the vault retains only encrypted files.</p>
     </div>
   </section>;
 }

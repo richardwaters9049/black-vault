@@ -32,6 +32,7 @@ interface Commands {
   import_example_file: VaultFile;
   delete_locked_vault: void;
   list_vault_files: VaultFile[];
+  decrypt_vault_file: VaultFile;
   export_vault_file: VaultFile | null;
 }
 
@@ -52,6 +53,7 @@ export const native = {
   importExampleFile: (example: string) => call('import_example_file', { example }),
   deleteLockedVault: (vaultId: string, confirmation: string) => call('delete_locked_vault', { vaultId, confirmation }),
   listVaultFiles: () => call('list_vault_files'),
+  decryptVaultFile: (fileId: string) => call('decrypt_vault_file', { fileId }),
   exportVaultFile: (fileId: string) => call('export_vault_file', { fileId }),
 };
 

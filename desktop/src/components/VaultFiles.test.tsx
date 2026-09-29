@@ -29,6 +29,7 @@ beforeEach(async () => {
       files = [{ id, name: 'secret.txt', sizeBytes: 6 }];
       return files[0];
     }
+    if (command === 'decrypt_vault_file') return files[0];
     if (command === 'export_vault_file') return files[0] ?? null;
     if (command === 'import_example_file') { files = [{ id, name: 'example-notes.txt', sizeBytes: 10 }]; return files[0]; }
     throw new Error('Unexpected command');
@@ -44,15 +45,20 @@ async function click(label: string) {
   if (!button) throw new Error('Missing button: ' + label);
   await act(async () => { button.click(); });
 }
-it('imports, lists and exports using dedicated native commands', async () => {
+it('imports into the vault and decrypts in memory without exporting plaintext', async () => {
   expect(host.textContent).toContain('No encrypted files');
   await click('Choose file to encrypt');
   expect(host.textContent).toContain('secret.txt');
   expect(host.textContent).toContain('6 bytes');
   await click('Decryption');
-  await click('Decrypt & export');
-  expect(host.textContent).toContain('plaintext');
-  expect(calls).toEqual(['list_vault_files', 'import_vault_file', 'list_vault_files', 'export_vault_file']);
+  await act(async () => root.render(<VaultFiles vaultId="vault-id" chosenDecrypt={{ id, nonce: 1 }} />));
+  const decrypt = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Decrypt');
+  if (!decrypt) throw new Error('Decrypt confirmation missing');
+  await act(async () => decrypt.click());
+  expect(host.textContent).toContain('No plaintext file was saved');
+  expect(host.textContent).toContain('Decrypted vault files');
+  expect(calls).toEqual(['list_vault_files', 'import_vault_file', 'list_vault_files', 'decrypt_vault_file']);
+  expect(calls).not.toContain('export_vault_file');
 });
 it('does not list plaintext filenames when the vault component unmounts', async () => {
   await click('Choose file to encrypt');
@@ -75,7 +81,7 @@ it('stages a dragged example and waits for explicit Encrypt confirmation', async
   if (!confirm) throw new Error('Missing Encrypt confirmation');
   await act(async () => confirm.click());
   expect(calls).toContain('import_example_file');
-  expect(host.textContent).toContain('encrypted and saved');
+  expect(host.textContent).toContain('encrypted and stored');
 });
 
 it('stages an example selected by clicking the sidebar, without relying on native drag events', async () => {

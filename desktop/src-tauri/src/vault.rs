@@ -379,6 +379,9 @@ impl VaultStore {
             "notes" => ("example-notes.txt", b"Black Vault example notes.\nThese are harmless, local sample bytes.\n"),
             "csv" => ("example-records.csv", b"id,label,status\n1,Alpha,active\n2,Beta,pending\n"),
             "sql" => ("example-query.sql", b"-- Inert SQL example, stored as text.\nSELECT id, label FROM records WHERE id = ?;\n"),
+            "json" => ("example-settings.json", br#"{"theme":"dark","offline":true,"version":1}"#),
+            "markdown" => ("example-readme.md", b"# Black Vault sample\nAn offline Markdown document.\n"),
+            "log" => ("example-audit.log", b"2026-09-29 INFO Sample event\n2026-09-29 INFO No network activity\n"),
             "blocked" => ("example-script.sh", b"#!/bin/sh\necho This example is deliberately rejected.\n"),
             _ => return Err(VaultError::file_unavailable()),
         };
@@ -514,6 +517,27 @@ impl VaultStore {
         }
         files.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(files)
+    }
+
+    // Verify and decrypt into zeroising Rust memory only. No plaintext file is written.
+    pub fn decrypt_in_vault(
+        &self,
+        file_id: &str,
+    ) -> Result<crate::file_crypto::VaultFile, VaultError> {
+        if !crate::file_crypto::valid_id(file_id) {
+            return Err(VaultError::file_invalid());
+        }
+        let guard = self.lock_active()?;
+        let vault = guard.as_ref().ok_or_else(VaultError::locked)?;
+        let dir = self.root.join(format!("{}.files", vault.id));
+        let sealed = crate::file_crypto::read_regular(
+            &dir.join(format!("{file_id}.bvfile")),
+            8 * 1024 * 1024,
+        )?;
+        let (info, _plaintext) =
+            crate::file_crypto::open(&vault.id, file_id, &vault.master_key, &sealed)?;
+        // _plaintext is dropped and zeroised before returning to the UI.
+        Ok(info)
     }
 
     pub fn export_path(
@@ -683,6 +707,23 @@ mod tests {
     const PASSWORD: &str = "correct horse battery staple";
 
     #[test]
+    fn decrypt_in_vault_verifies_without_creating_plaintext_files() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let vault = store.create("Memory only".into(), PASSWORD.into()).unwrap();
+        let encrypted = store.import_example("notes").unwrap();
+        let before: Vec<_> = std::fs::read_dir(dir.path().join("vaults").join(format!("{}.files", vault.id)))
+            .unwrap().map(|entry| entry.unwrap().file_name()).collect();
+        assert_eq!(store.decrypt_in_vault(&encrypted.id).unwrap(), encrypted);
+        let after: Vec<_> = std::fs::read_dir(dir.path().join("vaults").join(format!("{}.files", vault.id)))
+            .unwrap().map(|entry| entry.unwrap().file_name()).collect();
+        assert_eq!(before, after);
+        assert_eq!(store.list_files().unwrap().len(), 1);
+        store.lock().unwrap();
+        assert_eq!(store.decrypt_in_vault(&encrypted.id).unwrap_err().code, "vault_locked");
+    }
+
+    #[test]
     fn example_imports_use_same_scan_gate_and_delete_requires_exact_confirmation() {
         let dir = TempDir::new().unwrap();
         let store = store(&dir);
@@ -703,7 +744,14 @@ mod tests {
             store.import_example("sql").unwrap().name,
             "example-query.sql"
         );
-        assert_eq!(store.list_files().unwrap().len(), 3);
+        for (id, name) in [
+            ("json", "example-settings.json"),
+            ("markdown", "example-readme.md"),
+            ("log", "example-audit.log"),
+        ] {
+            assert_eq!(store.import_example(id).unwrap().name, name);
+        }
+        assert_eq!(store.list_files().unwrap().len(), 6);
         assert_eq!(
             store
                 .delete_locked(&vault.id, &format!("DELETE {}", vault.id))

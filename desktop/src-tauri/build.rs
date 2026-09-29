@@ -13,6 +13,7 @@ fn main() {
             "import_example_file",
             "delete_locked_vault",
             "list_vault_files",
+            "decrypt_vault_file",
             "export_vault_file",
         ]),
     ))

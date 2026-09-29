@@ -80,6 +80,7 @@ pub fn run() {
             commands::import_example_file,
             commands::delete_locked_vault,
             commands::list_vault_files,
+            commands::decrypt_vault_file,
             commands::export_vault_file
         ])
         .run(context())

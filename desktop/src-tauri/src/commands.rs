@@ -336,6 +336,14 @@ pub fn list_vault_files(
 }
 
 #[tauri::command]
+pub fn decrypt_vault_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    file_id: String,
+) -> Result<crate::file_crypto::VaultFile, crate::vault::VaultError> {
+    store.decrypt_in_vault(&file_id)
+}
+
+#[tauri::command]
 pub async fn export_vault_file(
     app: tauri::AppHandle,
     file_id: String,

@@ -85,11 +85,11 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
         setPhase('idle');
         setStatus(file.name + ' selected (' + formatFileSize(file.sizeBytes) + '). Press Encrypt to continue.');
       } catch (reason) {
-        console.error('[vault-drop][ui] metadata request failed', reason);
+        console.error('[vault-drop][ui] metadata request failed (details withheld)');
         if (active) { setPhase('error'); setStatus(errorMessage(reason)); }
       }
     }).then(fn => { console.info('[vault-drop][ui] staged event listener ready'); if (active) unlistenDrop = fn; else fn(); }).catch(reason => {
-      console.error('[vault-drop][ui] failed to register staged listener', reason);
+      console.error('[vault-drop][ui] failed to register staged listener (details withheld)');
       if (active) { setPhase('error'); setStatus(errorMessage(reason)); }
     });
     listen('black-vault-file-drop-multiple', () => {
@@ -137,7 +137,7 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
       // Native hover is not a filesystem selection. Never reject an empty
       // paths array: internal Example Files also generate drag events.
       setOver(true);
-    }).then(fn => { console.info('[vault-drop][ui] hover listener ready'); if (active) unlistenHover = fn; else fn(); }).catch(reason => { console.error('[vault-drop][ui] hover listener failed', reason); });
+    }).then(fn => { console.info('[vault-drop][ui] hover listener ready'); if (active) unlistenHover = fn; else fn(); }).catch(() => { console.error('[vault-drop][ui] hover listener failed (details withheld)'); });
     return () => {
       console.info('[vault-drop][ui] listeners cleaned up', { mode, busy });
       active = false;

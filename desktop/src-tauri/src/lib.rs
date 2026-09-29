@@ -1,3 +1,13 @@
+// Diagnostic messages are compiled out of optimised release binaries.
+macro_rules! debug_trace {
+    ($($arg:tt)*) => {{
+        #[cfg(debug_assertions)]
+        { eprintln!($($arg)*); }
+        #[cfg(not(debug_assertions))]
+        { let _ = (); }
+    }};
+}
+
 mod commands;
 mod file_crypto;
 mod import_scan;
@@ -19,43 +29,45 @@ pub fn run() {
                 let handle = webview.app_handle();
                 match drag {
                     DragDropEvent::Enter { paths, position } => {
-                        eprintln!("[vault-drop][rust] enter count={} x={:.0} y={:.0}", paths.len(), position.x, position.y);
+                        let _ = (&paths, &position);
+                        debug_trace!("[vault-drop][rust] enter count={} x={:.0} y={:.0}", paths.len(), position.x, position.y);
                     }
                     DragDropEvent::Over { .. } => {
                         // Avoid spamming the terminal for every pointer movement.
                     }
                     DragDropEvent::Drop { paths, position } => {
-                        eprintln!("[vault-drop][rust] drop count={} x={:.0} y={:.0}", paths.len(), position.x, position.y);
+                        let _ = &position;
+                        debug_trace!("[vault-drop][rust] drop count={} x={:.0} y={:.0}", paths.len(), position.x, position.y);
                         if paths.is_empty() {
-                            eprintln!("[vault-drop][rust] empty native drop: possible in-memory Example File; frontend handles it");
+                            debug_trace!("[vault-drop][rust] empty native drop: possible in-memory Example File; frontend handles it");
                             return;
                         }
                         let event_name = match handle.state::<commands::DroppedFileState>().0.lock() {
                             Ok(mut pending) => {
                                 if paths.len() == 1 {
                                     *pending = Some(paths[0].clone());
-                                    eprintln!("[vault-drop][rust] native selection staged (path redacted)");
+                                    debug_trace!("[vault-drop][rust] native selection staged (path redacted)");
                                     "black-vault-file-staged"
                                 } else {
                                     *pending = None;
-                                    eprintln!("[vault-drop][rust] rejected native drop count={}", paths.len());
+                                    debug_trace!("[vault-drop][rust] rejected native drop count={}", paths.len());
                                     "black-vault-file-drop-multiple"
                                 }
                             }
                             Err(_) => {
-                                eprintln!("[vault-drop][rust][error] pending file state mutex poisoned");
+                                debug_trace!("[vault-drop][rust][error] pending file state mutex poisoned");
                                 return;
                             }
                         };
                         // Emit after releasing the mutex: frontend may immediately
                         // invoke describe_dropped_file, which needs the same lock.
                         match webview.emit(event_name, ()) {
-                            Ok(()) => eprintln!("[vault-drop][rust] emitted {}", event_name),
-                            Err(error) => eprintln!("[vault-drop][rust][error] emit failed: {}", error),
+                            Ok(()) => debug_trace!("[vault-drop][rust] emitted {}", event_name),
+                            Err(_) => debug_trace!("[vault-drop][rust][error] event emission failed (details withheld)"),
                         }
                     }
                     DragDropEvent::Leave => {
-                        eprintln!("[vault-drop][rust] leave (preserving any completed selection)");
+                        debug_trace!("[vault-drop][rust] leave (preserving any completed selection)");
                     }
                     _ => {}
                 }

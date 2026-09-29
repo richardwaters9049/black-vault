@@ -1,3 +1,13 @@
+// Diagnostic messages are compiled out of optimised release binaries.
+macro_rules! debug_trace {
+    ($($arg:tt)*) => {{
+        #[cfg(debug_assertions)]
+        { eprintln!($($arg)*); }
+        #[cfg(not(debug_assertions))]
+        { let _ = (); }
+    }};
+}
+
 use serde::Serialize;
 use std::{
     fs,
@@ -99,7 +109,7 @@ pub async fn select_file(app: tauri::AppHandle) -> Result<Option<SelectedFile>, 
             .set_title("Select a file — Black Vault")
             .blocking_pick_file();
         let Some(selection) = selection else {
-            eprintln!("black_vault event=file_selection_cancelled");
+            debug_trace!("black_vault event=file_selection_cancelled");
             return Ok(None);
         };
         let path = selection
@@ -107,7 +117,7 @@ pub async fn select_file(app: tauri::AppHandle) -> Result<Option<SelectedFile>, 
             .map_err(|_| NativeError::unavailable())?;
         let result = describe_selection(&path);
         // Deliberately exclude paths, filenames, sizes and file contents from audit events.
-        eprintln!(
+        debug_trace!(
             "black_vault event={}",
             if result.is_ok() {
                 "file_selected"
@@ -258,25 +268,31 @@ pub fn lock_vault(
 pub fn describe_dropped_file(
     dropped: tauri::State<'_, DroppedFileState>,
 ) -> Result<SelectedFile, NativeError> {
-    eprintln!("[vault-drop][rust] describe_dropped_file invoked");
+    debug_trace!("[vault-drop][rust] describe_dropped_file invoked");
     let guard = dropped.0.lock().map_err(|_| {
-        eprintln!("[vault-drop][rust][error] pending file mutex poisoned");
+        debug_trace!("[vault-drop][rust][error] pending file mutex poisoned");
         NativeError::unavailable()
     })?;
     let path = guard.as_ref().ok_or_else(|| {
-        eprintln!("[vault-drop][rust][error] no pending native file");
+        debug_trace!("[vault-drop][rust][error] no pending native file");
         NativeError::unavailable()
     })?;
     let result = describe_selection(path);
     match &result {
-        Ok(file) => eprintln!(
-            "[vault-drop][rust] metadata accepted size_bytes={} (filename redacted)",
-            file.size_bytes
-        ),
-        Err(error) => eprintln!(
-            "[vault-drop][rust][error] metadata rejected code={}",
-            error.code
-        ),
+        Ok(file) => {
+            let _ = &file;
+            debug_trace!(
+                "[vault-drop][rust] metadata accepted size_bytes={} (filename redacted)",
+                file.size_bytes
+            );
+        }
+        Err(error) => {
+            let _ = &error;
+            debug_trace!(
+                "[vault-drop][rust][error] metadata rejected code={}",
+                error.code
+            );
+        }
     }
     result
 }

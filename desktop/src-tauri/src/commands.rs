@@ -336,6 +336,23 @@ pub fn list_vault_files(
 }
 
 #[tauri::command]
+pub fn create_vault_text_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    name: String,
+    content: String,
+) -> Result<crate::file_crypto::VaultFile, crate::vault::VaultError> {
+    store.create_text_file(&name, &content)
+}
+
+#[tauri::command]
+pub fn read_vault_text_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    file_id: String,
+) -> Result<String, crate::vault::VaultError> {
+    store.read_text_file(&file_id)
+}
+
+#[tauri::command]
 pub fn decrypt_vault_file(
     store: tauri::State<'_, crate::vault::VaultStore>,
     file_id: String,

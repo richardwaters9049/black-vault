@@ -18,6 +18,8 @@
     "allow-import-example-file",
     "allow-delete-locked-vault",
     "allow-list-vault-files",
+    "allow-create-vault-text-file",
+    "allow-read-vault-text-file",
     "allow-decrypt-vault-file",
     "allow-export-vault-file",
     "core:event:allow-listen",

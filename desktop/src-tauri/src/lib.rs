@@ -80,6 +80,8 @@ pub fn run() {
             commands::import_example_file,
             commands::delete_locked_vault,
             commands::list_vault_files,
+            commands::create_vault_text_file,
+            commands::read_vault_text_file,
             commands::decrypt_vault_file,
             commands::export_vault_file
         ])

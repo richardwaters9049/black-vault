@@ -371,6 +371,38 @@ impl VaultStore {
         self.import_bytes(name, &bytes)
     }
 
+    pub fn create_text_file(
+        &self,
+        name: &str,
+        content: &str,
+    ) -> Result<crate::file_crypto::VaultFile, VaultError> {
+        const ALLOWED: &[&str] = &["txt", "md", "json", "csv", "log"];
+        let extension = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+        if !ALLOWED.contains(&extension.as_str()) {
+            return Err(VaultError::file_name());
+        }
+        self.import_bytes(name, content.as_bytes())
+    }
+
+    pub fn read_text_file(&self, file_id: &str) -> Result<String, VaultError> {
+        if !crate::file_crypto::valid_id(file_id) {
+            return Err(VaultError::file_invalid());
+        }
+        let guard = self.lock_active()?;
+        let vault = guard.as_ref().ok_or_else(VaultError::locked)?;
+        let dir = self.root.join(format!("{}.files", vault.id));
+        let sealed = crate::file_crypto::read_regular(
+            &dir.join(format!("{file_id}.bvfile")), 8 * 1024 * 1024,
+        )?;
+        let (info, plaintext) =
+            crate::file_crypto::open(&vault.id, file_id, &vault.master_key, &sealed)?;
+        let extension = info.name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+        if !["txt", "md", "json", "csv", "log"].contains(&extension.as_str()) {
+            return Err(VaultError::file_invalid());
+        }
+        String::from_utf8(plaintext.to_vec()).map_err(|_| VaultError::file_invalid())
+    }
+
     pub fn import_example(
         &self,
         example: &str,
@@ -705,6 +737,22 @@ mod tests {
         VaultStore::new(dir.path().join("vaults"))
     }
     const PASSWORD: &str = "correct horse battery staple";
+
+    #[test]
+    fn text_documents_are_encrypted_in_vault_and_read_only_when_unlocked() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let vault = store.create("Documents".into(), PASSWORD.into()).unwrap();
+        let created = store.create_text_file("draft.md", "# Private note").unwrap();
+        assert_eq!(store.read_text_file(&created.id).unwrap(), "# Private note");
+        assert_eq!(store.list_files().unwrap(), vec![created.clone()]);
+        let entries: Vec<_> = std::fs::read_dir(dir.path().join("vaults").join(format!("{}.files", vault.id)))
+            .unwrap().map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(entries, vec![format!("{}.bvfile", created.id)]);
+        assert_eq!(store.create_text_file("run.sh", "echo unsafe").unwrap_err().code, "invalid_filename");
+        store.lock().unwrap();
+        assert_eq!(store.read_text_file(&created.id).unwrap_err().code, "vault_locked");
+    }
 
     #[test]
     fn decrypt_in_vault_verifies_without_creating_plaintext_files() {

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, File, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole, KeyRound } from 'lucide-react';
+import { Check, ChevronDown, File, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole, KeyRound, FilePlus2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import VaultWorkspace from '@/components/VaultWorkspace';
 import VaultFiles from '@/components/VaultFiles';
+import VaultFileEditor from '@/components/VaultFileEditor';
 import ExampleFiles from '@/components/ExampleFiles';
 import AuthGate from '@/components/AuthGate';
 import SplashScreen from '@/components/SplashScreen';
@@ -16,7 +17,7 @@ export default function App() {
   const [session, setSession] = useState<VaultSummary | null>(null);
   const [booting, setBooting] = useState(true);
   const [examplesOpen, setExamplesOpen] = useState(false);
-  const [page, setPage] = useState<'overview' | 'vault'>('overview');
+  const [page, setPage] = useState<'overview' | 'vault' | 'create'>('overview');
   const [storedFiles, setStoredFiles] = useState<VaultFile[]>([]);
   const [decryptedFiles, setDecryptedFiles] = useState<VaultFile[]>([]);
   const [chosenDecrypt, setChosenDecrypt] = useState<{ id: string; nonce: number } | null>(null);
@@ -88,6 +89,10 @@ export default function App() {
         className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'vault' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
         <KeyRound size={16} /> My Vault
       </button>
+      <button type="button" onClick={() => setPage('create')} aria-current={page === 'create' ? 'page' : undefined}
+        className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'create' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
+        <FilePlus2 size={16} /> Create Files
+      </button>
       <button type="button" aria-controls="example-files-panel" aria-expanded={examplesOpen}
         onClick={() => setExamplesOpen(value => !value)}
         className={"mt-2 flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors duration-200 " + (examplesOpen ? "border-blue-400/15 bg-blue-400/[0.07] text-sky-200" : "border-transparent text-slate-400 hover:bg-white/[0.035] hover:text-blue-300")}>
@@ -110,7 +115,7 @@ export default function App() {
 
     <main className="mx-auto w-full max-w-6xl px-6 py-8 sm:px-10 sm:py-10">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-6">
-        <div className="flex items-center gap-2 text-xs text-slate-400"><HardDrive size={14} /> Personal workspace <span className="mx-1 text-slate-700">/</span><span className="text-slate-200">{page === 'overview' ? 'Overview' : 'My Vault'}</span></div>
+        <div className="flex items-center gap-2 text-xs text-slate-400"><HardDrive size={14} /> Personal workspace <span className="mx-1 text-slate-700">/</span><span className="text-slate-200">{page === 'overview' ? 'Overview' : page === 'vault' ? 'My Vault' : 'Create Files'}</span></div>
         <Button variant="outline" disabled={busy} onClick={() => void signOut()}><LockKeyhole size={14} />{busy ? 'Signing out…' : 'Sign out'}</Button>
       </header>
 
@@ -139,6 +144,12 @@ export default function App() {
       </div>
 
       </div>
+      {page === 'create' && <div className="pt-6">
+        <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">In-vault documents</p>
+        <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Create Files</h1>
+        <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Write a document and encrypt it directly into your unlocked vault. No external Save dialog or plaintext file is created.</p>
+        <VaultFileEditor vaultId={session.id} onFilesChange={setStoredFiles}/>
+      </div>}
       {page === 'vault' && <div className="pt-6">
         <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">Local security</p>
         <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">My Vault</h1>

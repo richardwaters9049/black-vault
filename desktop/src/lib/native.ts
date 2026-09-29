@@ -37,6 +37,7 @@ interface Commands {
   lock_selected_files: NestedVaultSummary;
   unlock_nested_vault: VaultFile[];
   restore_nested_vault: VaultFile[];
+  create_nested_text_file: VaultFile[];
   create_vault_text_file: VaultFile;
   read_vault_text_file: string;
   decrypt_vault_file: VaultFile;
@@ -63,6 +64,7 @@ export const native = {
   listNestedVaults: () => call('list_nested_vaults'),
   lockSelectedFiles: (name: string, password: string, fileIds: string[]) => call('lock_selected_files', { name, password, fileIds }),
   unlockNestedVault: (nestedId: string, password: string) => call('unlock_nested_vault', { nestedId, password }),
+  createNestedTextFile: (nestedId: string, password: string, name: string, content: string) => call('create_nested_text_file', { nestedId, password, name, content }),
   restoreNestedVault: (nestedId: string, password: string) => call('restore_nested_vault', { nestedId, password }),
   createVaultTextFile: (name: string, content: string) => call('create_vault_text_file', { name, content }),
   readVaultTextFile: (fileId: string) => call('read_vault_text_file', { fileId }),

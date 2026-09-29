@@ -125,3 +125,8 @@ Before any encrypted file is persisted, Rust performs a quick offline static pol
 
 ### Example Files and local vault deletion
 The sidebar now includes built-in, harmless Example Files to run through the same offline scan/import/encryption path (including a deliberately blocked script). A locked vault can be permanently deleted from sign-in using an exact full-ID confirmation. Forgotten passwords cannot be reset or recovered; deletion destroys local encrypted contents rather than restoring access. See [vault lifecycle](docs/SPRINT_05_EXAMPLES_VAULT_LIFECYCLE.md).
+
+
+### Sprint 06 — Nested vault workspace (29/09/2026)
+
+Nested containers now have a dedicated PIN-gated workspace accessible from **Locked Vaults**. Users can inspect their encrypted file list, create supported text documents directly inside the nested encrypted record, and lock the nested view without locking the parent. Each write requires the PIN again. Restoring all files to the parent remains available. See [Sprint 06](docs/SPRINT_06_NESTED_VAULT_WORKSPACE.md) for current limits, security caveats and manual acceptance steps.

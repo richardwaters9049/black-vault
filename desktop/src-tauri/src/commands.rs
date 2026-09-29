@@ -1,5 +1,9 @@
 use serde::Serialize;
-use std::{fs, path::{Path, PathBuf}, sync::Mutex};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
@@ -244,7 +248,9 @@ pub fn lock_vault(
     store: tauri::State<'_, crate::vault::VaultStore>,
     dropped: tauri::State<'_, DroppedFileState>,
 ) -> Result<(), crate::vault::VaultError> {
-    if let Ok(mut pending) = dropped.0.lock() { *pending = None; }
+    if let Ok(mut pending) = dropped.0.lock() {
+        *pending = None;
+    }
     store.lock()
 }
 
@@ -263,8 +269,14 @@ pub fn describe_dropped_file(
     })?;
     let result = describe_selection(path);
     match &result {
-        Ok(file) => eprintln!("[vault-drop][rust] metadata accepted size_bytes={} (filename redacted)", file.size_bytes),
-        Err(error) => eprintln!("[vault-drop][rust][error] metadata rejected code={}", error.code),
+        Ok(file) => eprintln!(
+            "[vault-drop][rust] metadata accepted size_bytes={} (filename redacted)",
+            file.size_bytes
+        ),
+        Err(error) => eprintln!(
+            "[vault-drop][rust][error] metadata rejected code={}",
+            error.code
+        ),
     }
     result
 }
@@ -275,10 +287,16 @@ pub async fn import_dropped_file(
 ) -> Result<crate::file_crypto::VaultFile, crate::vault::VaultError> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<DroppedFileState>();
-        let path = state.0.lock().map_err(|_| crate::vault::VaultError::storage_error())?
-            .take().ok_or_else(crate::vault::VaultError::file_unavailable)?;
+        let path = state
+            .0
+            .lock()
+            .map_err(|_| crate::vault::VaultError::storage_error())?
+            .take()
+            .ok_or_else(crate::vault::VaultError::file_unavailable)?;
         app.state::<crate::vault::VaultStore>().import_path(&path)
-    }).await.map_err(|_| crate::vault::VaultError::storage_error())?
+    })
+    .await
+    .map_err(|_| crate::vault::VaultError::storage_error())?
 }
 
 #[tauri::command]
@@ -336,29 +354,45 @@ pub fn list_vault_files(
 }
 
 #[tauri::command]
-pub fn list_nested_vaults(store: tauri::State<'_, crate::vault::VaultStore>)
-    -> Result<Vec<crate::vault::NestedVaultSummary>, crate::vault::VaultError> {
+pub fn list_nested_vaults(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+) -> Result<Vec<crate::vault::NestedVaultSummary>, crate::vault::VaultError> {
     store.list_nested_vaults()
 }
 #[tauri::command]
 pub fn lock_selected_files(
     store: tauri::State<'_, crate::vault::VaultStore>,
-    name: String, password: String, file_ids: Vec<String>,
+    name: String,
+    password: String,
+    file_ids: Vec<String>,
 ) -> Result<crate::vault::NestedVaultSummary, crate::vault::VaultError> {
     store.lock_selected_files(name, password, file_ids)
 }
 #[tauri::command]
 pub fn unlock_nested_vault(
     store: tauri::State<'_, crate::vault::VaultStore>,
-    nested_id: String, password: String,
+    nested_id: String,
+    password: String,
 ) -> Result<Vec<crate::file_crypto::VaultFile>, crate::vault::VaultError> {
     store.unlock_nested_vault(&nested_id, password)
 }
 
 #[tauri::command]
+pub fn create_nested_text_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    nested_id: String,
+    password: String,
+    name: String,
+    content: String,
+) -> Result<Vec<crate::file_crypto::VaultFile>, crate::vault::VaultError> {
+    store.create_nested_text_file(&nested_id, password, name, content)
+}
+
+#[tauri::command]
 pub fn restore_nested_vault(
     store: tauri::State<'_, crate::vault::VaultStore>,
-    nested_id: String, password: String,
+    nested_id: String,
+    password: String,
 ) -> Result<Vec<crate::file_crypto::VaultFile>, crate::vault::VaultError> {
     store.restore_nested_vault(&nested_id, password)
 }

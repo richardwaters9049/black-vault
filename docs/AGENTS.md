@@ -62,3 +62,13 @@ See [Sprint 02](SPRINT_02_VAULT_FOUNDATION.md) for current scope and [desktop se
 
 ### Sprint 04 (29/09/2026)
 Branch `feat/desktop-auto-lock`: first-time vault creation has public example placeholders, not prefilled credentials. React inactivity tracking requests Rust `lock_vault` after five minutes and checks wall-clock expiry after timer delays. Do not claim native sleep interception or per-session IPC tokens. See `docs/SPRINT_04_AUTO_LOCK.md`. Manual native acceptance remains outstanding.
+
+### Desktop brand polish (29/09/2026)
+Stay on `feat/desktop-auto-lock` for this small UI change. Shared blue/black SVG `VaultMark` is used by splash, sign-in and sidebar; keep animation lightweight and respect reduced motion. Creation-only Show/Hide toggles the password input type without storing credentials. No Rust crypto changes.
+
+Splash timing refinement: 2.8-second minimum brand reveal; the animated large SVG VaultMark spins on its Y-axis and settles upright, with reduced-motion support. Do not change the small static mark in the sign-in or sidebar. Startup must still fail closed if Rust lock/initialisation fails.
+
+Splash refinement: fast .95s smooth planar logo revolution (no Y-axis flip/overshoot), while preserving 2.8s startup reveal and reduced-motion fallback. This supersedes the earlier Y-axis spin description above.
+
+### Offline pre-import gate (29/09/2026)
+Rust `import_scan::scan` must execute on the exact bounded in-memory bytes before `active_file_dir`, encryption or persistence in `VaultStore::import_path`. A rejection must not write into the vault, execute the source, or change the source file. This is a conservative offline static screen, NOT comprehensive malware detection. See `docs/SPRINT_04_IMPORT_SCREENING.md`. Do not present ordinary SQL statements as malware.

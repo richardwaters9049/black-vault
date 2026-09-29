@@ -54,6 +54,9 @@ impl VaultError {
     pub(crate) fn file_large() -> Self {
         Self::new("file_too_large", "Files must not exceed 5 MiB.")
     }
+    pub(crate) fn scan_blocked(finding: crate::import_scan::ScanFinding) -> Self {
+        Self::new("import_scan_blocked", finding.message())
+    }
     pub(crate) fn file_name() -> Self {
         Self::new("invalid_filename", "The filename is unsupported.")
     }
@@ -367,6 +370,8 @@ impl VaultStore {
             .and_then(|value| value.to_str())
             .ok_or_else(VaultError::file_name)?;
         let bytes = crate::file_crypto::read_regular(path, crate::file_crypto::MAX_FILE_BYTES)?;
+        // Scan the exact bounded bytes that will be encrypted, before any vault write.
+        crate::import_scan::scan(name, &bytes).map_err(VaultError::scan_blocked)?;
         let dir = self.active_file_dir(vault)?;
         let id = loop {
             let candidate = crate::file_crypto::random_id();
@@ -589,6 +594,27 @@ mod tests {
         VaultStore::new(dir.path().join("vaults"))
     }
     const PASSWORD: &str = "correct horse battery staple";
+
+    #[test]
+    fn blocked_import_never_creates_a_vault_file() {
+        let dir = TempDir::new().unwrap();
+        let store = store(&dir);
+        let vault = store
+            .create("Scanner test".into(), PASSWORD.into())
+            .unwrap();
+        let source = dir.path().join("disguised.txt");
+        fs::write(&source, b"MZnot-a-safe-document").unwrap();
+        let error = store.import_path(&source).unwrap_err();
+        assert_eq!(error.code, "import_scan_blocked");
+        assert!(store.list_files().unwrap().is_empty());
+        assert!(
+            !dir.path()
+                .join("vaults")
+                .join(format!("{}.files", vault.id))
+                .exists()
+        );
+        assert_eq!(fs::read(source).unwrap(), b"MZnot-a-safe-document");
+    }
 
     #[test]
     fn creation_persists_only_encrypted_metadata_and_lock_clears_display_name() {

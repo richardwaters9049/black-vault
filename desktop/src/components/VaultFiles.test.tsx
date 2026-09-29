@@ -35,7 +35,7 @@ async function click(label: string) {
 }
 it('imports, lists and exports using dedicated native commands', async () => {
   expect(host.textContent).toContain('No encrypted files');
-  await click('Import and encrypt');
+  await click('Scan, import and encrypt');
   expect(host.textContent).toContain('secret.txt');
   expect(host.textContent).toContain('6 bytes');
   await click('Export');
@@ -43,7 +43,7 @@ it('imports, lists and exports using dedicated native commands', async () => {
   expect(calls).toEqual(['list_vault_files', 'import_vault_file', 'list_vault_files', 'export_vault_file']);
 });
 it('does not list plaintext filenames when the vault component unmounts', async () => {
-  await click('Import and encrypt');
+  await click('Scan, import and encrypt');
   await act(async () => root.render(<></>));
   expect(host.textContent).not.toContain('secret.txt');
 });

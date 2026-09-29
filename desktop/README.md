@@ -122,3 +122,13 @@ From the repository root use `./start.sh` to open the compiled app, `./start.sh 
 
 ### Inactivity lock
 The React desktop session calls Rust `lock_vault` after five minutes without keyboard, pointer, wheel or touch activity. Wall-clock checking detects a delayed interval after sleep/resume, but this is not a native OS sleep listener. First-time setup includes development-only example placeholders, never prefilled credentials. See `../docs/SPRINT_04_AUTO_LOCK.md`.
+
+### Blue/black identity and password visibility
+`src/components/VaultMark.tsx` is the shared scalable SVG brand mark used by the splash, authentication and sidebar. Splash motion is CSS-based and honours reduced-motion preferences. First-time vault creation includes a masked-by-default Show/Hide password button; toggling it does not persist or change the password. Avoid using the public development example password with real files.
+
+Splash polish: the large vault mark now completes a perspective Y-axis spin with a small overshoot during the 2.8-second startup reveal. The progress stroke tracks the longer reveal. Reduced-motion disables the spin; native lock/desktop initialisation still gates navigation.
+
+Spin refinement: the splash logo now uses a single fast 0.95-second 2D revolution rather than a slow perspective Y-axis flip and overshoot, preventing the planar SVG from visually disappearing/snapping at the end. The overall startup reveal remains 2.8 seconds; reduced motion is unchanged.
+
+### Pre-import screening
+`src-tauri/src/import_scan.rs` runs in Rust after the native picker and before encryption/persistence. It blocks selected executable/script/macro/archive formats and known high-risk signatures/patterns. The scan is offline and bounded to 5 MiB. A pass is not antivirus clearance; the source remains unchanged. See `../docs/SPRINT_04_IMPORT_SCREENING.md` for threat model, tests and limitations.

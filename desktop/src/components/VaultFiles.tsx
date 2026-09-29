@@ -23,7 +23,7 @@ export default function VaultFiles({ vaultId }: { vaultId: string }) {
       const imported = await native.importVaultFile();
       if (imported) {
         setFiles(await native.listVaultFiles());
-        setNotice('File encrypted and saved inside this vault. The original remains unchanged.');
+        setNotice('Local pre-import checks found no blocked indicators. File encrypted and saved; this is not an antivirus clearance. The original remains unchanged.');
       }
     } catch (reason) { setError(errorMessage(reason)); }
     finally { setBusy(false); }
@@ -41,9 +41,9 @@ export default function VaultFiles({ vaultId }: { vaultId: string }) {
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h4 className="flex items-center gap-2 text-sm font-medium"><FileLock2 size={15} className="text-blue-400" /> Encrypted files</h4>
-        <p className="mt-1 text-xs text-slate-400">Authenticated local storage · 5 MiB maximum per file</p>
+        <p className="mt-1 text-xs text-slate-400">Offline static pre-import checks · 5 MiB maximum per file</p>
       </div>
-      <Button variant="outline" disabled={busy} onClick={() => void importFile()}><FolderPlus size={15}/>{busy ? 'Working…' : 'Import and encrypt'}</Button>
+      <Button variant="outline" disabled={busy} onClick={() => void importFile()}><FolderPlus size={15}/>{busy ? 'Selecting / checking…' : 'Scan, import and encrypt'}</Button>
     </div>
     {files.length === 0 ? <p className="mt-4 text-xs text-slate-500">No encrypted files in this vault.</p>
       : <div className="mt-4 space-y-2">{files.map(file => <div key={file.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-background p-3">
@@ -56,6 +56,6 @@ export default function VaultFiles({ vaultId }: { vaultId: string }) {
       </div>)}</div>}
     {error && <p role="alert" className="mt-3 text-xs text-red-300">{error}</p>}
     {notice && <p role="status" className="mt-3 text-xs leading-5 text-emerald-300">{notice}</p>}
-    <p className="mt-4 text-[11px] leading-5 text-slate-500">Import does not delete the source file. Export creates a new plaintext file and refuses to overwrite an existing destination.</p>
+    <p className="mt-4 text-[11px] leading-5 text-slate-500">Imports are screened locally for selected high-risk indicators before storage. This is not comprehensive malware detection. The original is never deleted. Export creates plaintext and refuses to overwrite existing files.</p>
   </section>;
 }

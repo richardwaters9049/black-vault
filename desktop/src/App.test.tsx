@@ -46,7 +46,7 @@ beforeEach(async () => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 
 async function ready() {
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 1150)); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 2900)); });
 }
 async function input(label: string, value: string) {
   const element = host.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
@@ -95,4 +95,17 @@ it('rejects an incorrect password without revealing the dashboard', async () => 
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('Incorrect vault password');
   expect(host.querySelector<HTMLInputElement>('input[aria-label="Vault password"]')?.value).toBe('');
   expect(host.textContent).not.toContain('Your vault, on your Mac.');
+});
+
+it('shows and hides the creation password without changing its value', async () => {
+  await ready();
+  await input('Vault password', 'a unique disposable test password');
+  const password = host.querySelector<HTMLInputElement>('input[aria-label="Vault password"]');
+  expect(password?.type).toBe('password');
+  await click('Show');
+  expect(password?.type).toBe('text');
+  expect(password?.value).toBe('a unique disposable test password');
+  await click('Hide');
+  expect(password?.type).toBe('password');
+  expect(password?.value).toBe('a unique disposable test password');
 });

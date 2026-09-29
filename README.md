@@ -116,3 +116,9 @@ Run `./start.sh` from the repository root to launch the compiled macOS app (`./s
 
 ### Sprint 04 — Development placeholders and inactivity lock
 First-time setup shows a **public, example-only** vault name and password as placeholders; do not use the sample password for real files. Authenticated sessions request a Rust vault lock after five minutes of inactivity. See [Sprint 04](docs/SPRINT_04_AUTO_LOCK.md) for limitations and manual checks.
+
+### Desktop brand polish (29/09/2026)
+The native splash, sign-in and sidebar now share a reusable blue-on-black vector Vault Mark (geometric cube/V). The splash draws the mark with subtle orbit motion, a blue progress stroke and a reduced-motion fallback. First-time vault creation has a Show/Hide password control (masked by default); example credentials remain placeholders, never prefilled. No encryption or authentication mechanism changed.
+
+### Offline import screening (29/09/2026)
+Before any encrypted file is persisted, Rust performs a quick offline static policy screen of the exact selected bytes (maximum 5 MiB). It blocks selected executable/script/macro types, executable signatures, a standard antivirus test string, selected high-risk command patterns, and archives requiring deeper inspection. **Passing is not proof a file is safe or malware-free.** The source is left untouched; SQL is treated as data, not automatically classified as injection. See [import screening](docs/SPRINT_04_IMPORT_SCREENING.md).

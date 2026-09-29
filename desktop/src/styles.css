@@ -21,16 +21,31 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 ::selection { background: #274779; }
 
-/* Native startup: the animation is visual only; Rust readiness controls navigation. */
-.vault-splash { background: radial-gradient(ellipse at 50% 43%, #171c34 0%, #090d14 57%); }
-.vault-ring { animation: vault-form 950ms cubic-bezier(.18,.78,.24,1) both; }
-.vault-ring-inner { animation-delay: 120ms; }
-.vault-lock { animation: vault-appear 700ms 420ms both; }
-.vault-reveal { animation: vault-appear 650ms 550ms both; }
-.vault-progress { animation: vault-load 1.1s ease-out both; transform-origin: left; }
-@keyframes vault-form { from { opacity: 0; transform: rotate(0deg) scale(.55); } to { opacity: 1; transform: rotate(45deg) scale(1); } }
+/* Black/blue identity: vector vault cube with a drawn-in V and restrained orbital motion. */
+.vault-splash { background: radial-gradient(ellipse at 50% 42%, #102b4b 0%, #081523 31%, #050a11 72%); }
+.vault-splash-grid { background-image: linear-gradient(#60a5fa08 1px, transparent 1px), linear-gradient(90deg, #60a5fa08 1px, transparent 1px); background-size: 32px 32px; mask-image: radial-gradient(ellipse at center, black, transparent 70%); }
+.bv-mark { display: inline-flex; flex: none; color: #60a5fa; filter: drop-shadow(0 0 10px #2563eb45); }
+.bv-mark-small { width: 32px; height: 32px; }
+.bv-mark-large { width: 112px; height: 112px; filter: drop-shadow(0 0 20px #38bdf86b); }
+.bv-mark-animated { backface-visibility: hidden; will-change: transform; transform-origin: center; animation: bv-vault-spin .95s cubic-bezier(.35,0,.2,1) .22s both; }
+.bv-mark-animated .bv-mark-shell, .bv-mark-animated .bv-mark-top, .bv-mark-animated .bv-mark-core, .bv-mark-animated .bv-mark-v { stroke-dasharray: 400; stroke-dashoffset: 400; animation: bv-draw .8s ease-out forwards; }
+.bv-mark-animated .bv-mark-top { animation-delay: .12s; }
+.bv-mark-animated .bv-mark-core { animation-delay: .23s; }
+.bv-mark-animated .bv-mark-v { animation-delay: .4s; }
+.bv-mark-animated .bv-mark-dot, .bv-mark-animated .bv-mark-spark { animation: vault-appear .4s .7s both; }
+.bv-logo-stage { animation: vault-appear .5s both; }
+.bv-orbit-one { animation: bv-spin 9s linear infinite; }
+.bv-orbit-two { animation: bv-spin 14s linear infinite reverse; }
+.bv-orbit-blip { transform-origin: 0 80px; animation: bv-orbit 3s linear infinite; }
+.vault-reveal { animation: vault-appear .65s .35s both; }
+.vault-progress { animation: vault-load 2.7s cubic-bezier(.22,.7,.2,1) both; transform-origin: left; }
+@keyframes bv-draw { to { stroke-dashoffset: 0; } }
+@keyframes bv-vault-spin { from { transform: rotate(-360deg); } to { transform: rotate(0deg); } }
+@keyframes bv-spin { to { transform: rotate(360deg); } }
+@keyframes bv-orbit { to { transform: rotate(360deg); } }
 @keyframes vault-appear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes vault-load { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @media (prefers-reduced-motion: reduce) {
-  .vault-ring, .vault-lock, .vault-reveal, .vault-progress { animation: none; }
+  .bv-mark-animated, .bv-mark-animated *, .bv-logo-stage, .bv-orbit, .bv-orbit-blip, .vault-reveal, .vault-progress { animation: none !important; }
+  .bv-mark-animated .bv-mark-shell, .bv-mark-animated .bv-mark-top, .bv-mark-animated .bv-mark-core, .bv-mark-animated .bv-mark-v { stroke-dashoffset: 0; }
 }

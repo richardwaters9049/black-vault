@@ -1,5 +1,6 @@
 mod commands;
 mod file_crypto;
+mod import_scan;
 mod vault;
 
 pub(crate) fn context<R: tauri::Runtime>() -> tauri::Context<R> {

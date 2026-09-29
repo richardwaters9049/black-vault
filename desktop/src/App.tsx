@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import VaultWorkspace from '@/components/VaultWorkspace';
 import AuthGate from '@/components/AuthGate';
 import SplashScreen from '@/components/SplashScreen';
+import VaultMark from '@/components/VaultMark';
 import { DEFAULT_IDLE_MS, hasSessionExpired } from '@/lib/sessionTimeout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { errorMessage, formatFileSize, native, type DesktopInfo, type SelectedFile, type VaultSummary } from '@/lib/native';
@@ -21,7 +22,7 @@ export default function App() {
   useEffect(() => {
     let active = true;
     // Fail closed: a webview reload must not inherit an unlocked Rust vault session.
-    Promise.all([native.lockVault(), native.getDesktopInfo(), new Promise<void>(resolve => setTimeout(resolve, 1100))]).then(([, value]) => {
+    Promise.all([native.lockVault(), native.getDesktopInfo(), new Promise<void>(resolve => setTimeout(resolve, 2800))]).then(([, value]) => {
       if (active) setInfo(value);
     }).catch(reason => { if (active) setError(errorMessage(reason)); })
       .finally(() => { if (active) setBooting(false); });
@@ -79,7 +80,7 @@ export default function App() {
   return <div className="grid grid-cols-1 md:grid-cols-[204px_1fr]">
     <aside className="flex flex-col border-b border-border bg-[#0b1018] p-5 md:border-r md:border-b-0">
       <div className="flex items-center gap-3 py-2">
-        <div className="flex size-9 items-center justify-center rounded-xl border border-blue-400/25 bg-blue-500/10"><LockKeyhole size={18} className="text-blue-400" /></div>
+        <div className="flex size-10 items-center justify-center rounded-xl border border-blue-400/25 bg-blue-500/10"><VaultMark /></div>
         <span className="text-xs font-semibold tracking-[0.12em]">BLACK VAULT</span>
       </div>
       <div className="mt-7 flex items-center gap-3 rounded-lg border border-blue-400/10 bg-blue-500/10 px-3 py-2.5 text-sm text-blue-300" aria-current="page"><LayoutDashboard size={16} /> Overview</div>

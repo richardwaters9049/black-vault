@@ -18,6 +18,8 @@ fn main() {
             "unlock_nested_vault",
             "restore_nested_vault",
             "create_nested_text_file",
+            "manage_nested_file",
+            "read_nested_text_file",
             "create_vault_text_file",
             "read_vault_text_file",
             "update_vault_text_file",

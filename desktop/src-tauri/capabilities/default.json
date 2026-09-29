@@ -23,6 +23,8 @@
     "allow-unlock-nested-vault",
     "allow-restore-nested-vault",
     "allow-create-nested-text-file",
+    "allow-manage-nested-file",
+    "allow-read-nested-text-file",
     "allow-create-vault-text-file",
     "allow-read-vault-text-file",
     "allow-update-vault-text-file",

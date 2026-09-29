@@ -389,6 +389,29 @@ pub fn create_nested_text_file(
 }
 
 #[tauri::command]
+pub fn manage_nested_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    nested_id: String,
+    password: String,
+    file_id: String,
+    action: String,
+    name: Option<String>,
+    content: Option<String>,
+) -> Result<Vec<crate::file_crypto::VaultFile>, crate::vault::VaultError> {
+    store.manage_nested_file(&nested_id, password, &file_id, &action, name, content)
+}
+
+#[tauri::command]
+pub fn read_nested_text_file(
+    store: tauri::State<'_, crate::vault::VaultStore>,
+    nested_id: String,
+    password: String,
+    file_id: String,
+) -> Result<String, crate::vault::VaultError> {
+    store.read_nested_text_file(&nested_id, password, &file_id)
+}
+
+#[tauri::command]
 pub fn restore_nested_vault(
     store: tauri::State<'_, crate::vault::VaultStore>,
     nested_id: String,

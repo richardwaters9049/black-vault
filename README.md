@@ -135,3 +135,8 @@ Nested containers now have a dedicated PIN-gated workspace accessible from **Loc
 ### Sprint 07 — File management (in progress)
 
 Parent-vault text documents can now be edited and renamed through the in-memory editor, with authenticated encrypted replacement and no plaintext export. A two-step confirmation deletes an encrypted document. Nested individual-file management and transfer are not yet implemented. See [Sprint 07](docs/SPRINT_07_FILE_MANAGEMENT.md).
+
+
+### Sprint 08 — Nested file management (in progress)
+
+Protected files are selectable; their metadata appears in the right-hand panel. PIN-authorised text editing/renaming, deletion and individual encrypted transfers to the parent are supported. See [Sprint 08](docs/SPRINT_08_NESTED_FILE_MANAGEMENT.md).

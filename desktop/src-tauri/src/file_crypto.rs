@@ -9,11 +9,14 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rand::{RngCore, rngs::OsRng};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::{Read, Write},
     path::Path,
 };
 use zeroize::Zeroizing;
+
+#[cfg(unix)]
+use std::fs::File;
 
 pub const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_ENVELOPE_BYTES: u64 = 8 * 1024 * 1024;
@@ -270,14 +273,11 @@ pub(crate) fn sync_directory(dir: &Path) -> std::io::Result<()> {
 
     #[cfg(windows)]
     {
-        use std::os::windows::fs::OpenOptionsExt;
-
-        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
-        return OpenOptions::new()
-            .read(true)
-            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
-            .open(dir)?
-            .sync_all();
+        // Windows has no supported equivalent of fsync() for a directory.
+        // The file itself is flushed before rename; attempting sync_all() on
+        // a directory handle returns ERROR_ACCESS_DENIED.
+        let _ = dir;
+        return Ok(());
     }
 
     #[allow(unreachable_code)]

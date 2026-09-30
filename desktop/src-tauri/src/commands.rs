@@ -191,9 +191,14 @@ mod tests {
             .invoke_handler(tauri::generate_handler![get_desktop_info, list_vaults])
             .build(context)
             .unwrap();
+        #[cfg(windows)]
+        let local_origin = "http://tauri.localhost";
+        #[cfg(not(windows))]
+        let local_origin = "tauri://localhost";
+
         for (label, origin, allowed) in [
-            ("main", "tauri://localhost", true),
-            ("other", "tauri://localhost", false),
+            ("main", local_origin, true),
+            ("other", local_origin, false),
             ("main", "https://example.com", false),
         ] {
             let window = app.get_webview_window(label).unwrap_or_else(|| {

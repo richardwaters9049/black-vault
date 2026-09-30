@@ -9,7 +9,8 @@
 - Documentation reorganisation merged to `main`.
 - Release branch created from the combined tree.
 - macOS arm64 app builds and passes structural `codesign --verify`.
-- Cross-platform CI added for macOS arm64, Windows x64 and Linux x64.
+- Cross-platform CI passes on macOS arm64, Windows x64 and Linux x64.
+- CI packages native release candidates: macOS DMG, Windows NSIS installer, Linux AppImage and DEB.
 - Cross-platform native acceptance matrix documented.
 
 ## Required before public release

@@ -30,4 +30,18 @@ fn main() {
         ]),
     ))
     .expect("Unable to build the desktop command permissions");
+
+    // Tauri's Windows test binaries need the Common Controls v6 manifest.
+    // Without it, cargo test can terminate before the Rust harness starts
+    // with STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139).
+    #[cfg(windows)]
+    embed_windows_manifest();
+}
+
+#[cfg(windows)]
+fn embed_windows_manifest() {
+    let manifest = std::path::Path::new("windows-app-manifest.xml");
+    println!("cargo:rerun-if-changed={}", manifest.display());
+    println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+    println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifest.display());
 }

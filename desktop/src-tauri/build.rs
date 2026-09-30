@@ -1,6 +1,12 @@
 fn main() {
-    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
-        tauri_build::AppManifest::new().commands(&[
+    let attributes = tauri_build::Attributes::new();
+
+    #[cfg(windows)]
+    let attributes =
+        attributes.windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest());
+
+    tauri_build::try_build(
+        attributes.app_manifest(tauri_build::AppManifest::new().commands(&[
             "get_desktop_info",
             "select_file",
             "list_vaults",
@@ -27,8 +33,8 @@ fn main() {
             "delete_vault_file",
             "decrypt_vault_file",
             "export_vault_file",
-        ]),
-    ))
+        ])),
+    )
     .expect("Unable to build the desktop command permissions");
 
     // Tauri's Windows test binaries need the Common Controls v6 manifest.

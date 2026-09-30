@@ -1,0 +1,47 @@
+name: Desktop cross-platform
+on:
+  pull_request:
+    paths: ["desktop/**", ".github/workflows/desktop-cross-platform.yml"]
+  push:
+    branches: [main, "release/**"]
+    paths: ["desktop/**", ".github/workflows/desktop-cross-platform.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "macOS arm64", os: macos-14 }
+          - { name: "Windows x64", os: windows-2025 }
+          - { name: "Linux x64", os: ubuntu-24.04 }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90"
+          components: clippy, rustfmt
+      - name: Linux native dependencies
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: cargo build --manifest-path src-tauri/Cargo.toml --locked --release

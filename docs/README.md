@@ -13,6 +13,10 @@ Start with the [project summary](project/PROJECT_SUMMARY.md) and [desktop archit
 - [7 September notes](notes/7thSept2026_notes.md)
 - [28 September notes](notes/28thSept2026_notes.md)
 
+## Release
+- [Black Vault 0.1.0 acceptance](release/RELEASE_0.1.0.md)
+- [Cross-platform support](release/CROSS_PLATFORM_SUPPORT.md)
+
 ## Sprint records
 - [Sprint 01 — Desktop foundation](sprints/sprint-01/SPRINT_01_DESKTOP_FOUNDATION.md)
 - [Sprint 02 — Vault foundation](sprints/sprint-02/SPRINT_02_VAULT_FOUNDATION.md)

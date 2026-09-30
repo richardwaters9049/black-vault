@@ -1763,7 +1763,12 @@ impl VaultStore {
             crate::file_crypto::sync_directory(&self.root)?;
             Ok(())
         })();
-        if result.is_err() {
+        if let Err(_error) = result {
+            #[cfg(test)]
+            eprintln!(
+                "vault persist_new failed at {}: {_error:?}",
+                self.root.display()
+            );
             let _ = fs::remove_file(&temp);
             return Err(VaultError::storage());
         }

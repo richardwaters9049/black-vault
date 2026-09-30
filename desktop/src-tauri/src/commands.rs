@@ -214,6 +214,11 @@ mod tests {
                         invoke_key: tauri::test::INVOKE_KEY.to_string(),
                     },
                 );
+                if result.is_ok() != allowed {
+                    eprintln!(
+                        "IPC diagnostic: command={command} label={label} origin={origin} result={result:?}"
+                    );
+                }
                 assert_eq!(
                     result.is_ok(),
                     allowed,

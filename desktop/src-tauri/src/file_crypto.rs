@@ -9,11 +9,14 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rand::{RngCore, rngs::OsRng};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::{Read, Write},
     path::Path,
 };
 use zeroize::Zeroizing;
+
+#[cfg(unix)]
+use std::fs::File;
 
 pub const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_ENVELOPE_BYTES: u64 = 8 * 1024 * 1024;
@@ -262,6 +265,25 @@ pub fn read_regular(path: &Path, max: u64) -> Result<Zeroizing<Vec<u8>>, VaultEr
     }
     Ok(bytes)
 }
+pub(crate) fn sync_directory(dir: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        return File::open(dir)?.sync_all();
+    }
+
+    #[cfg(windows)]
+    {
+        // Windows has no supported equivalent of fsync() for a directory.
+        // The file itself is flushed before rename; attempting sync_all() on
+        // a directory handle returns ERROR_ACCESS_DENIED.
+        let _ = dir;
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Ok(())
+}
+
 pub fn persist_new(dir: &Path, id: &str, bytes: &[u8]) -> Result<(), VaultError> {
     if !valid_id(id) || bytes.len() as u64 > MAX_ENVELOPE_BYTES {
         return Err(invalid());
@@ -283,7 +305,7 @@ pub fn persist_new(dir: &Path, id: &str, bytes: &[u8]) -> Result<(), VaultError>
         file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&temp, &final_path)?;
-        File::open(dir)?.sync_all()?;
+        crate::file_crypto::sync_directory(dir)?;
         Ok(())
     })();
     if result.is_err() {

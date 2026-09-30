@@ -16,9 +16,6 @@ use std::{
 };
 use zeroize::{Zeroize, Zeroizing};
 
-#[cfg(test)]
-use std::fs::File;
-
 const KDF_MEMORY_KIB: u32 = 19_456;
 const KDF_ITERATIONS: u32 = 2;
 const KDF_PARALLELISM: u32 = 1;
@@ -39,8 +36,12 @@ fn transfer_checkpoint(stage: &'static str) -> std::io::Result<()> {
     // Compiled only for tests; the parent verifies the exit and reopens storage.
     if std::env::var("BV_TEST_EXIT_STAGE").ok().as_deref() == Some(stage) {
         if let Ok(marker) = std::env::var("BV_TEST_EXIT_MARKER") {
-            std::fs::write(&marker, stage)?;
-            File::open(&marker)?.sync_all()?;
+            let mut marker_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&marker)?;
+            marker_file.write_all(stage.as_bytes())?;
+            marker_file.sync_all()?;
         }
         std::process::exit(86);
     }
@@ -2365,8 +2366,15 @@ mod tests {
             "first": first.id, "second": second.id
         });
         let path = PathBuf::from(&root).join("manifest.json");
-        fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
-        File::open(&path).unwrap().sync_all().unwrap();
+        let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
+        let mut manifest_file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        manifest_file.write_all(&manifest_bytes).unwrap();
+        manifest_file.sync_all().unwrap();
+        drop(manifest_file);
         crate::file_crypto::sync_directory(std::path::Path::new(&root)).unwrap();
         if stage.starts_with("nested_to_parent_") {
             let _ = worker.manage_nested_file(

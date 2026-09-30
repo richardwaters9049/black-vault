@@ -9,12 +9,15 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rand::{RngCore, rngs::OsRng};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::Write,
     path::PathBuf,
     sync::Mutex,
 };
 use zeroize::{Zeroize, Zeroizing};
+
+#[cfg(test)]
+use std::fs::File;
 
 const KDF_MEMORY_KIB: u32 = 19_456;
 const KDF_ITERATIONS: u32 = 2;
@@ -583,7 +586,7 @@ impl VaultStore {
             output.write_all(&sealed)?;
             output.sync_all()?;
             fs::rename(&temp, &path)?;
-            File::open(&dir)?.sync_all()?;
+            crate::file_crypto::sync_directory(&dir)?;
             Ok(())
         })();
         if result.is_err() {
@@ -608,10 +611,7 @@ impl VaultStore {
         let sealed = crate::file_crypto::read_regular(&path, 8 * 1024 * 1024)?;
         crate::file_crypto::open(&vault.id, file_id, &vault.master_key, &sealed)?;
         fs::remove_file(path).map_err(|_| VaultError::storage())?;
-        File::open(dir)
-            .map_err(|_| VaultError::storage())?
-            .sync_all()
-            .map_err(|_| VaultError::storage())
+        crate::file_crypto::sync_directory(&dir).map_err(|_| VaultError::storage())
     }
 
     pub fn import_example(
@@ -899,19 +899,13 @@ impl VaultStore {
             let _ = fs::remove_file(&path);
             return Err(VaultError::storage());
         }
-        File::open(&dir)
-            .map_err(|_| VaultError::storage())?
-            .sync_all()
-            .map_err(|_| VaultError::storage())?;
+        crate::file_crypto::sync_directory(&dir).map_err(|_| VaultError::storage())?;
         // Delete originals only AFTER the nested record is durable. On interrupted
         // deletion, duplicate ciphertext may remain, but data is not lost.
         for id in &ids {
             fs::remove_file(dir.join(format!("{id}.bvfile"))).map_err(|_| VaultError::storage())?;
         }
-        File::open(&dir)
-            .map_err(|_| VaultError::storage())?
-            .sync_all()
-            .map_err(|_| VaultError::storage())?;
+        crate::file_crypto::sync_directory(&dir).map_err(|_| VaultError::storage())?;
         Ok(NestedVaultSummary {
             id: child_id,
             file_count: ids.len(),
@@ -960,10 +954,7 @@ impl VaultStore {
             cleaned += 1;
         }
         if cleaned > 0 {
-            File::open(dir)
-                .map_err(|_| VaultError::storage())?
-                .sync_all()
-                .map_err(|_| VaultError::storage())?;
+            crate::file_crypto::sync_directory(dir).map_err(|_| VaultError::storage())?;
         }
         Ok(cleaned)
     }
@@ -1013,10 +1004,7 @@ impl VaultStore {
             fs::remove_file(parent).map_err(|_| VaultError::storage())?;
         }
         if !duplicates.is_empty() {
-            File::open(dir)
-                .map_err(|_| VaultError::storage())?
-                .sync_all()
-                .map_err(|_| VaultError::storage())?;
+            crate::file_crypto::sync_directory(dir).map_err(|_| VaultError::storage())?;
         }
         Ok(duplicates.len())
     }
@@ -1191,7 +1179,7 @@ impl VaultStore {
             output.write_all(&encoded)?;
             output.sync_all()?;
             fs::rename(&temp, &path)?;
-            File::open(&dir)?.sync_all()?;
+            crate::file_crypto::sync_directory(&dir)?;
             Ok(())
         })();
         if write_result.is_err() {
@@ -1344,7 +1332,7 @@ impl VaultStore {
             transfer_checkpoint("before_rename")?;
             fs::rename(&temp, &path)?;
             transfer_checkpoint("before_directory_sync")?;
-            File::open(&dir)?.sync_all()?;
+            crate::file_crypto::sync_directory(&dir)?;
             transfer_checkpoint("before_source_unlink")?;
             Ok(())
         })();
@@ -1354,10 +1342,7 @@ impl VaultStore {
         }
         fs::remove_file(&source).map_err(|_| VaultError::storage())?;
         transfer_checkpoint("before_source_directory_sync").map_err(|_| VaultError::storage())?;
-        File::open(&dir)
-            .map_err(|_| VaultError::storage())?
-            .sync_all()
-            .map_err(|_| VaultError::storage())?;
+        crate::file_crypto::sync_directory(&dir).map_err(|_| VaultError::storage())?;
         inventory.push(info);
         Ok(inventory)
     }
@@ -1535,7 +1520,7 @@ impl VaultStore {
             if action == "transfer_to_parent" {
                 transfer_checkpoint("nested_to_parent_after_rename")?;
             }
-            File::open(&dir)?.sync_all()?;
+            crate::file_crypto::sync_directory(&dir)?;
             Ok(())
         })();
         if result.is_err() {
@@ -1695,10 +1680,7 @@ impl VaultStore {
         transfer_checkpoint("restore_before_unlink").map_err(|_| VaultError::storage())?;
         fs::remove_file(path).map_err(|_| VaultError::storage())?;
         transfer_checkpoint("restore_after_unlink").map_err(|_| VaultError::storage())?;
-        File::open(&dir)
-            .map_err(|_| VaultError::storage())?
-            .sync_all()
-            .map_err(|_| VaultError::storage())?;
+        crate::file_crypto::sync_directory(&dir).map_err(|_| VaultError::storage())?;
         Ok(restored.into_iter().map(|(info, _)| info).collect())
     }
 
@@ -1778,7 +1760,7 @@ impl VaultStore {
             file.write_all(bytes)?;
             file.sync_all()?;
             fs::rename(&temp, &destination)?;
-            File::open(&self.root)?.sync_all()?;
+            crate::file_crypto::sync_directory(&self.root)?;
             Ok(())
         })();
         if result.is_err() {
@@ -2380,7 +2362,7 @@ mod tests {
         let path = PathBuf::from(&root).join("manifest.json");
         fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
         File::open(&path).unwrap().sync_all().unwrap();
-        File::open(&root).unwrap().sync_all().unwrap();
+        crate::file_crypto::sync_directory(std::path::Path::new(&root)).unwrap();
         if stage.starts_with("nested_to_parent_") {
             let _ = worker.manage_nested_file(
                 &nested.id,

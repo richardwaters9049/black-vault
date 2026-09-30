@@ -180,12 +180,16 @@ mod tests {
     #[test]
     fn ipc_allows_only_the_main_local_window() {
         let temporary = tempfile::tempdir().unwrap();
+        let mut context = crate::context();
+        // The IPC policy is under test here, not Windows executable icon loading.
+        // Tauri's mock runtime does not need the packaged application's icon resource.
+        context.set_default_window_icon(None);
         let app = tauri::test::mock_builder()
             .manage(crate::vault::VaultStore::new(
                 temporary.path().join("vaults"),
             ))
             .invoke_handler(tauri::generate_handler![get_desktop_info, list_vaults])
-            .build(crate::context())
+            .build(context)
             .unwrap();
         for (label, origin, allowed) in [
             ("main", "tauri://localhost", true),

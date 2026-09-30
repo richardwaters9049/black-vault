@@ -262,6 +262,28 @@ pub fn read_regular(path: &Path, max: u64) -> Result<Zeroizing<Vec<u8>>, VaultEr
     }
     Ok(bytes)
 }
+pub(crate) fn sync_directory(dir: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        return File::open(dir)?.sync_all();
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        return OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(dir)?
+            .sync_all();
+    }
+
+    #[allow(unreachable_code)]
+    Ok(())
+}
+
 pub fn persist_new(dir: &Path, id: &str, bytes: &[u8]) -> Result<(), VaultError> {
     if !valid_id(id) || bytes.len() as u64 > MAX_ENVELOPE_BYTES {
         return Err(invalid());
@@ -283,7 +305,7 @@ pub fn persist_new(dir: &Path, id: &str, bytes: &[u8]) -> Result<(), VaultError>
         file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&temp, &final_path)?;
-        File::open(dir)?.sync_all()?;
+        crate::file_crypto::sync_directory(dir)?;
         Ok(())
     })();
     if result.is_err() {

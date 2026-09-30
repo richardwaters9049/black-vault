@@ -7,9 +7,9 @@ Black Vault uses Tauri 2 with a Rust core and React/Vite UI. Platform support is
 
 | Platform | Automated source/build gate | Native packaged GUI acceptance | Distribution |
 | --- | --- | --- | --- |
-| macOS Apple Silicon | Local tests/build pass; CI added | Existing native acceptance plus final RC walkthrough required | Ad-hoc internal build; Developer ID/notarisation outstanding |
-| Windows x64 | GitHub Actions gate added | Required on Windows before support claim | Signing/installer release work outstanding |
-| Linux x64 | GitHub Actions gate added | Required on representative Linux desktop before support claim | Package format/repository distribution work outstanding |
+| macOS Apple Silicon | CI tests and DMG packaging pass | Final CI-produced RC walkthrough required | Ad-hoc build; Developer ID/notarisation outstanding |
+| Windows x64 | CI tests and NSIS packaging pass | Required on Windows x64 before support claim | Code-signing strategy outstanding |
+| Linux x64 | CI tests and AppImage/DEB packaging pass | Required on representative x64 Linux desktop before support claim | Repository/provenance strategy outstanding |
 
 The Rust storage implementation uses `#[cfg(unix)]` for Unix permission and `O_NOFOLLOW` hardening. Windows therefore follows portable Rust filesystem semantics but does **not** inherit Unix mode-bit protections. Windows filesystem ACL/reparse-point behaviour requires a dedicated security review before public Windows release.
 

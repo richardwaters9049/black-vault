@@ -113,9 +113,12 @@ it('stages a native Finder file and replaces the previous selection on a second 
   expect(host.textContent).not.toContain('example-notes.txt selected');
 });
 
-it('surfaces native listener registration failures', async () => {
+it('surfaces native listener registration failures without logging sensitive details', async () => {
+  const error = vi.spyOn(console, 'error').mockImplementation(() => {});
   eventState.failListener = 'black-vault-file-drop-multiple';
   await click('Decryption');
   await act(async () => { await Promise.resolve(); });
   expect(host.textContent).toContain('listener unavailable');
+  expect(error).toHaveBeenCalledWith('[vault-drop][ui] failed to register multi-drop listener (details withheld)');
+  error.mockRestore();
 });

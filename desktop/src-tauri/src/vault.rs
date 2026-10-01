@@ -2,7 +2,6 @@
 //! A separate random master key is wrapped for each vault with a password-derived KEK.
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rand::{RngCore, rngs::OsRng};
-use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -12,7 +11,15 @@ use std::{
 use zeroize::{Zeroize, Zeroizing};
 
 mod crypto;
+mod error;
+mod models;
+
 use crypto::{derive, open, seal, valid_id};
+pub use error::VaultError;
+use models::{
+    KdfRecord, NestedVaultPayload, NestedVaultRecord, OpenVault, VaultRecord, WrappedSecret,
+};
+pub use models::{NestedVaultSummary, VaultSummary};
 
 const KDF_MEMORY_KIB: u32 = 19_456;
 const KDF_ITERATIONS: u32 = 2;
@@ -51,135 +58,6 @@ fn transfer_checkpoint(stage: &'static str) -> std::io::Result<()> {
 #[cfg(not(test))]
 fn transfer_checkpoint(_stage: &'static str) -> std::io::Result<()> {
     Ok(())
-}
-
-#[derive(Debug, Serialize, PartialEq, Eq)]
-pub struct VaultError {
-    pub code: &'static str,
-    pub message: &'static str,
-}
-impl VaultError {
-    pub(crate) fn picker_busy() -> Self {
-        Self::new("picker_busy", "A native file picker is already open.")
-    }
-    pub(crate) fn storage_error() -> Self {
-        Self::storage()
-    }
-    pub(crate) fn locked() -> Self {
-        Self::new("vault_locked", "Unlock a vault to access files.")
-    }
-    pub(crate) fn file_invalid() -> Self {
-        Self::new(
-            "invalid_encrypted_file",
-            "The encrypted file could not be authenticated.",
-        )
-    }
-    pub(crate) fn file_unavailable() -> Self {
-        Self::new(
-            "file_unavailable",
-            "The selected file is unavailable or is not a regular file.",
-        )
-    }
-    pub(crate) fn file_large() -> Self {
-        Self::new("file_too_large", "Files must not exceed 5 MiB.")
-    }
-    pub(crate) fn scan_blocked(finding: crate::import_scan::ScanFinding) -> Self {
-        Self::new("import_scan_blocked", finding.message())
-    }
-    pub(crate) fn file_name() -> Self {
-        Self::new("invalid_filename", "The filename is unsupported.")
-    }
-    pub(crate) fn export_exists() -> Self {
-        Self::new(
-            "export_destination_exists",
-            "Choose a new destination; existing files will not be overwritten.",
-        )
-    }
-    fn new(code: &'static str, message: &'static str) -> Self {
-        Self { code, message }
-    }
-    fn storage() -> Self {
-        Self::new("storage_unavailable", "Local vault storage is unavailable.")
-    }
-    fn invalid() -> Self {
-        Self::new(
-            "invalid_credentials",
-            "The password is incorrect or the vault cannot be authenticated.",
-        )
-    }
-    fn busy() -> Self {
-        Self::new(
-            "vault_already_unlocked",
-            "Lock the currently open vault first.",
-        )
-    }
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct VaultSummary {
-    pub id: String,
-    // Names are encrypted on disk. Only the unlocked vault exposes its name.
-    pub name: Option<String>,
-    pub is_locked: bool,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct KdfRecord {
-    algorithm: String,
-    salt: String,
-    m_cost: u32,
-    t_cost: u32,
-    p_cost: u32,
-    output_len: usize,
-}
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct WrappedSecret {
-    nonce: String,
-    ciphertext: String,
-}
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct VaultRecord {
-    version: u8,
-    id: String,
-    kdf: KdfRecord,
-    wrapped: WrappedSecret,
-}
-struct OpenVault {
-    id: String,
-    name: Zeroizing<String>,
-    // Zeroising is best-effort; host compromise while unlocked is out of scope.
-    #[allow(dead_code)]
-    // Retained for subsequent encrypted-file operations; never exposed to JavaScript.
-    master_key: Zeroizing<[u8; MASTER_KEY_LEN]>,
-}
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct NestedVaultRecord {
-    version: u8,
-    parent_id: String,
-    id: String,
-    kdf: KdfRecord,
-    // Double wrapping: parent master key AND independent child password required.
-    parent_wrapped: WrappedSecret,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct NestedVaultPayload {
-    name: String,
-    // Existing encrypted envelopes, never plaintext.
-    files: Vec<(String, String)>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NestedVaultSummary {
-    pub id: String,
-    pub file_count: usize,
 }
 
 pub struct VaultStore {

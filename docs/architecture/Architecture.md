@@ -1,64 +1,65 @@
-# Black Vault — Architecture Overview
+# Black Vault — As-Built Architecture
 
-**Updated:** 29 September 2026  
-**Status:** Desktop-first direction; Sprint 01 foundation implemented.  
-**Detailed proposed security design:** [DESKTOP_SECURITY_ARCHITECTURE.md](DESKTOP_SECURITY_ARCHITECTURE.md)
+**Updated:** 1 October 2026
+**Status:** Black Vault 0.1.0 hardened desktop implementation.
 
-## Product
+## System overview
 
-Black Vault is an offline-first desktop cybersecurity application for locally encrypted file storage, isolated vault workspaces and, later, secure recipient-to-recipient sharing. The primary app must operate without a mandatory server, account, cloud connection, PostgreSQL or Docker.
-
-## Current implementation
+Black Vault is an offline-first encrypted desktop vault. The active product is a Tauri 2 application with a React/Vite/TypeScript presentation layer and a Rust security/storage core. It does not require an account, remote API, database server, Docker or an internet connection for normal operation.
 
 ```text
-desktop/
-  React 19 + Vite + TypeScript + Tailwind CSS
-              |
-       typed Tauri IPC
-              |
-  Tauri 2 / Rust native commands
-    get_desktop_info | select_file
-              |
-      native macOS file picker
+React 19 / TypeScript / Vite
+        │
+        │ restricted typed Tauri IPC
+        ▼
+Tauri 2 / Rust security and storage core
+        │
+        │ authenticated encrypted records
+        ▼
+Local application data
 ```
 
-Sprint 01 returns selected-file metadata only. It does not yet encrypt, import, persist or share desktop files. The release Apple Silicon macOS application was built; manual native-window and picker acceptance is outstanding.
+The WebView is not the authority for filesystem access or cryptographic keys. Native paths are obtained by Rust through the picker/drop boundary, while passwords are passed to Rust only for the operation that needs them. Vault master keys remain Rust-side.
 
-## Proposed target architecture (not yet implemented)
+## Rust vault core
 
-```text
-Tauri / React presentation
-         |
-restricted typed IPC
-         |
-Rust vault/session manager
-   |       |        |
-Vault A  Vault B   Vault C   (independent keys and lifecycle)
-   |       |        |
-Authenticated encrypted metadata and file containers
-         |
-Local filesystem; no mandatory network dependency
-```
+The vault implementation is separated by responsibility:
 
-Rust should own decrypted vault keys, file operations and metadata access. Investigate an SQLite in-memory database per unlocked vault, reconstructed from authenticated encrypted persistent metadata. Save encrypted atomic checkpoints after mutations and explicitly test interrupted writes and recovery. Cryptographic separation within one process is not OS-level process isolation.
+| Module | Responsibility |
+| --- | --- |
+| `vault/session.rs` | Vault creation, unlock/lock, session state and nested-attempt throttling |
+| `vault/crypto.rs` | Argon2id derivation and authenticated wrapping of vault records |
+| `vault/files.rs` | Parent-vault import, encrypted text/file operations, export and deletion |
+| `vault/nested.rs` | PIN-protected nested vaults, transfers, restore and recovery |
+| `vault/models.rs` | Versioned persisted records and public summaries |
+| `vault/error.rs` | Deliberately bounded user-facing errors |
+| `file_crypto.rs` | Per-file encryption, authenticated envelopes and hardened filesystem helpers |
+| `import_scan.rs` | Offline pre-import policy for high-confidence risky content |
 
-## Legacy application (preserved)
+The split is structural rather than cryptographic: all modules execute in the same process and share the same Rust trust boundary.
 
-- `backend/`: Rust/Axum API, SQLx and PostgreSQL.
-- `frontend/`: Next.js web client and browser cryptography.
-- `tests/fixtures/crypto-v1.json`: shared interoperability vectors.
-- `Encryption_Architecture.md`: original web-era architecture, not the desktop implementation plan.
-- `../notes/28thSept2026_notes.md`: detailed legacy crypto and version 2 file-workflow checkpoint.
+## Persistent model
 
-Retain existing encrypted records and version semantics. Do not silently reinterpret or migrate old envelopes. Sharing must use recipient public-key identity and wrapped per-file keys, never the sender's vault master key or password.
+A root vault has a random 256-bit master key. The user's password is processed with Argon2id to derive a wrapping key; that wrapping key protects the vault master key and encrypted vault metadata. The password is not the file-encryption key.
 
-## Delivery sequence
+Each imported file receives its own random identifier and data-encryption material. Its filename and contents are authenticated and encrypted before persistence. A file envelope is bound to both its vault and file identity through AES-GCM associated data, preventing a valid ciphertext from being silently transplanted into another vault or file identity.
 
-1. Sprint 01 native acceptance and release-bundle inspection.
-2. Sprint 02 Rust crypto extraction, local vault lifecycle and ephemeral metadata feasibility prototype.
-3. Desktop encrypted file workflows, persistence and recovery.
-4. Versioned portable sharing and recipient identity.
-5. Security Centre, durable audit and integrity verification.
-6. LAN transport, optional encrypted relay and cross-platform release hardening.
+Nested vaults use a four-digit PIN-derived key and are additionally wrapped by the parent vault master key. Opening a nested vault therefore requires both an unlocked parent vault and the correct nested PIN.
 
-For exact implementation versus design status, consult `../project/PROJECT_SUMMARY.md`.
+## Filesystem and durability
+
+Sensitive writes use restrictive Unix permissions where available, temporary files, `sync_all`, rename and directory synchronisation. Regular-file reads use bounded sizes and reject symlinks on Unix with no-follow semantics.
+
+Transfer and restore operations are ordered so interruption favours duplicate encrypted data over silent data loss. Recovery recognises only known staging names and authenticates relevant encrypted records before cleanup or reconciliation. Fault-injection and subprocess-interruption tests exercise these persistence boundaries.
+
+## UI and session boundary
+
+The React layer uses typed native wrappers in `desktop/src/lib/native.ts`. The active desktop UI does not use browser local/session storage, cookies, IndexedDB, network fetches or WebSockets for vault state.
+
+The application locks on explicit lock/sign-out and after five minutes of inactivity. Locking releases the active Rust session and its best-effort-zeroised secret buffers. This does not claim protection from malware, memory inspection or an administrator controlling the host while a vault is unlocked.
+
+## Legacy code
+
+`frontend/` and `backend/` preserve the earlier web architecture for history and cryptographic compatibility. They are not part of the active desktop runtime. `legacy/README.md` documents that boundary.
+
+For security properties and threat assumptions, see [Desktop Security Architecture](DESKTOP_SECURITY_ARCHITECTURE.md) and the [Threat Model](../security/THREAT_MODEL.md).

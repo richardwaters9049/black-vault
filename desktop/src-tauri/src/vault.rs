@@ -1,4 +1,4 @@
-//! Sprint 02 local vault foundation. No secret material crosses the Tauri IPC boundary.
+//! Local vault core. Secret material remains behind the Rust/Tauri IPC boundary.
 //! A separate random master key is wrapped for each vault with a password-derived KEK.
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rand::{RngCore, rngs::OsRng};

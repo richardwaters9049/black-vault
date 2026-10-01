@@ -1,7 +1,6 @@
 import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
-// Adapted from frontend/components/ui/button.tsx; native button semantics need no UI primitive dependency.
 export function Button({ className, variant = 'primary', type = 'button', ...props }:
   ComponentProps<'button'> & { variant?: 'primary' | 'outline' }) {
   return <button type={type} className={cn(

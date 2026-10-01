@@ -269,7 +269,10 @@ pub(crate) fn cleanup_file(path: &Path) {
     if let Err(error) = fs::remove_file(path)
         && error.kind() != std::io::ErrorKind::NotFound
     {
+        #[cfg(debug_assertions)]
         eprintln!("[black-vault] rollback cleanup failed: {:?}", error.kind());
+        #[cfg(not(debug_assertions))]
+        let _ = error;
     }
 }
 

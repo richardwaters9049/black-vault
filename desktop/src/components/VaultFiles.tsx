@@ -62,8 +62,7 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
   }
 
   useEffect(() => {
-    if (!isTauri()) { console.info('[vault-drop][ui] Native Tauri runtime not detected'); return; }
-    console.info('[vault-drop][ui] registering listeners', { mode, busy });
+    if (!isTauri()) return;
     let active = true;
     let unlistenDrop: (() => void) | undefined;
     let unlistenMultiple: (() => void) | undefined;
@@ -72,28 +71,23 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
     // Rust stages the native Finder path first, then emits this path-free event.
     // This avoids relying on WebKit's inconsistent paths and event ordering.
     listen('black-vault-file-staged', async () => {
-      console.info('[vault-drop][ui] native file-staged event received', { active, mode, busy });
-      if (!active || mode !== 'encrypt' || busy) { console.warn('[vault-drop][ui] ignored staged event: inactive, wrong mode or busy'); return; }
+      if (!active || mode !== 'encrypt' || busy) return;
       setOver(false);
       try {
-        console.info('[vault-drop][ui] requesting native metadata');
         const file = await native.describeDroppedFile();
-        console.info('[vault-drop][ui] metadata received', { sizeBytes: file.sizeBytes, filenamePresent: Boolean(file.name) });
         if (!active) return;
         setSelection({ mode: 'encrypt', id: 'native-drop', name: file.name });
-        console.info('[vault-drop][ui] file staged in encryption area');
         setPhase('idle');
         setStatus(file.name + ' selected (' + formatFileSize(file.sizeBytes) + '). Press Encrypt to continue.');
       } catch (reason) {
         console.error('[vault-drop][ui] metadata request failed (details withheld)');
         if (active) { setPhase('error'); setStatus(errorMessage(reason)); }
       }
-    }).then(fn => { console.info('[vault-drop][ui] staged event listener ready'); if (active) unlistenDrop = fn; else fn(); }).catch(reason => {
+    }).then(fn => { if (active) unlistenDrop = fn; else fn(); }).catch(reason => {
       console.error('[vault-drop][ui] failed to register staged listener (details withheld)');
       if (active) { setPhase('error'); setStatus(errorMessage(reason)); }
     });
     listen('black-vault-file-drop-multiple', () => {
-      console.warn('[vault-drop][ui] native multi/empty drop notification');
       if (active && mode === 'encrypt') {
         setOver(false); setPhase('error');
         setStatus('Drop one Finder file at a time. The previous selection has not been changed.');
@@ -103,7 +97,6 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
       if (active) { setPhase('error'); setStatus(errorMessage(reason)); }
     });
     getCurrentWebview().onDragDropEvent(event => {
-      if (event.payload.type !== 'over') console.info('[vault-drop][ui] webview event', { type: event.payload.type, count: 'paths' in event.payload ? event.payload.paths?.length : undefined });
       if (!active || busy) return;
       if (event.payload.type === 'drop') {
         setOver(false);
@@ -115,7 +108,6 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
             setSelection({ mode: 'decrypt', id: encrypted.id, name: encrypted.name });
             setPhase('idle');
             setStatus(encrypted.name + ' selected. Press Decrypt to continue.');
-            console.info('[vault-drop][ui] encrypted sidebar file staged', { id: encrypted.id.slice(0, 8) });
             return;
           }
         }
@@ -125,14 +117,11 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
         if (id && event.payload.paths.length === 0) {
           const sample = examples.find(item => item.id === id);
           if (sample) {
-            console.info('[vault-drop][ui] staged internal example from native empty-path drop', { id });
             setMode('encrypt');
             setSelection({ mode: 'encrypt', id, name: sample.name });
             setPhase('idle');
             setStatus(sample.name + ' selected. Press Encrypt to continue.');
           }
-        } else if (event.payload.paths.length === 0) {
-          console.warn('[vault-drop][ui] empty native drop without active example: check Finder file access / source');
         }
         return;
       }
@@ -140,12 +129,11 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
       // Native hover is not a filesystem selection. Never reject an empty
       // paths array: internal Example Files also generate drag events.
       setOver(true);
-    }).then(fn => { console.info('[vault-drop][ui] hover listener ready'); if (active) unlistenHover = fn; else fn(); }).catch(reason => {
+    }).then(fn => { if (active) unlistenHover = fn; else fn(); }).catch(reason => {
       console.error('[vault-drop][ui] hover listener failed (details withheld)');
       if (active) { setPhase('error'); setStatus(errorMessage(reason)); }
     });
     return () => {
-      console.info('[vault-drop][ui] listeners cleaned up', { mode, busy });
       active = false;
       unlistenDrop?.(); unlistenMultiple?.(); unlistenHover?.();
     };
@@ -196,7 +184,6 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
   }
   function drop(event: DragEvent<HTMLElement>) {
     event.preventDefault(); event.stopPropagation(); setOver(false);
-    console.info('[vault-drop][ui] HTML drop received', { mode, fileCount: event.dataTransfer.files?.length ?? 0, types: Array.from(event.dataTransfer.types ?? []) });
     if (busy) return;
     const fallback = event.dataTransfer.getData('text/plain');
     const raw = event.dataTransfer.getData(mode === 'encrypt' ? EXAMPLE_DRAG_TYPE : VAULT_FILE_DRAG_TYPE);

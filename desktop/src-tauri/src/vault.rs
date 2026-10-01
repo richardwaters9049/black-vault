@@ -591,7 +591,7 @@ impl VaultStore {
             Ok(())
         })();
         if result.is_err() {
-            let _ = fs::remove_file(temp);
+            crate::file_crypto::cleanup_file(&temp);
             return Err(VaultError::storage());
         }
         Ok(crate::file_crypto::VaultFile {
@@ -897,7 +897,7 @@ impl VaultStore {
             .is_err()
         {
             drop(output);
-            let _ = fs::remove_file(&path);
+            crate::file_crypto::cleanup_file(&path);
             return Err(VaultError::storage());
         }
         crate::file_crypto::sync_directory(&dir).map_err(|_| VaultError::storage())?;
@@ -1184,7 +1184,7 @@ impl VaultStore {
             Ok(())
         })();
         if write_result.is_err() {
-            let _ = fs::remove_file(temp);
+            crate::file_crypto::cleanup_file(&temp);
             return Err(VaultError::storage());
         }
         let mut result = Vec::new();
@@ -1338,7 +1338,7 @@ impl VaultStore {
             Ok(())
         })();
         if write_result.is_err() {
-            let _ = fs::remove_file(&temp);
+            crate::file_crypto::cleanup_file(&temp);
             return Err(VaultError::storage());
         }
         fs::remove_file(&source).map_err(|_| VaultError::storage())?;
@@ -1525,7 +1525,7 @@ impl VaultStore {
             Ok(())
         })();
         if result.is_err() {
-            let _ = fs::remove_file(temp);
+            crate::file_crypto::cleanup_file(&temp);
             return Err(VaultError::storage());
         }
         let mut result = Vec::new();
@@ -1770,7 +1770,7 @@ impl VaultStore {
                 "vault persist_new failed at {}: {_error:?}",
                 self.root.display()
             );
-            let _ = fs::remove_file(&temp);
+            crate::file_crypto::cleanup_file(&temp);
             return Err(VaultError::storage());
         }
         Ok(())

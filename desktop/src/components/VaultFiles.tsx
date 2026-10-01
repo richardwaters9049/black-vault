@@ -98,7 +98,10 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
         setOver(false); setPhase('error');
         setStatus('Drop one Finder file at a time. The previous selection has not been changed.');
       }
-    }).then(fn => { if (active) unlistenMultiple = fn; else fn(); }).catch(() => {});
+    }).then(fn => { if (active) unlistenMultiple = fn; else fn(); }).catch(reason => {
+      console.error('[vault-drop][ui] failed to register multi-drop listener (details withheld)');
+      if (active) { setPhase('error'); setStatus(errorMessage(reason)); }
+    });
     getCurrentWebview().onDragDropEvent(event => {
       if (event.payload.type !== 'over') console.info('[vault-drop][ui] webview event', { type: event.payload.type, count: 'paths' in event.payload ? event.payload.paths?.length : undefined });
       if (!active || busy) return;
@@ -137,7 +140,10 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
       // Native hover is not a filesystem selection. Never reject an empty
       // paths array: internal Example Files also generate drag events.
       setOver(true);
-    }).then(fn => { console.info('[vault-drop][ui] hover listener ready'); if (active) unlistenHover = fn; else fn(); }).catch(() => { console.error('[vault-drop][ui] hover listener failed (details withheld)'); });
+    }).then(fn => { console.info('[vault-drop][ui] hover listener ready'); if (active) unlistenHover = fn; else fn(); }).catch(reason => {
+      console.error('[vault-drop][ui] hover listener failed (details withheld)');
+      if (active) { setPhase('error'); setStatus(errorMessage(reason)); }
+    });
     return () => {
       console.info('[vault-drop][ui] listeners cleaned up', { mode, busy });
       active = false;

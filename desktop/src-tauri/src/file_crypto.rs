@@ -265,6 +265,14 @@ pub fn read_regular(path: &Path, max: u64) -> Result<Zeroizing<Vec<u8>>, VaultEr
     }
     Ok(bytes)
 }
+pub(crate) fn cleanup_file(path: &Path) {
+    if let Err(error) = fs::remove_file(path)
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        eprintln!("[black-vault] rollback cleanup failed: {:?}", error.kind());
+    }
+}
+
 pub(crate) fn sync_directory(dir: &Path) -> std::io::Result<()> {
     #[cfg(unix)]
     {
@@ -309,7 +317,7 @@ pub fn persist_new(dir: &Path, id: &str, bytes: &[u8]) -> Result<(), VaultError>
         Ok(())
     })();
     if result.is_err() {
-        let _ = fs::remove_file(&temp);
+        cleanup_file(&temp);
         return Err(VaultError::storage_error());
     }
     Ok(())
@@ -332,7 +340,7 @@ pub fn export_new(path: &Path, bytes: &[u8]) -> Result<(), VaultError> {
     })();
     if result.is_err() {
         drop(file);
-        let _ = fs::remove_file(path);
+        cleanup_file(path);
         return Err(VaultError::storage_error());
     }
     Ok(())

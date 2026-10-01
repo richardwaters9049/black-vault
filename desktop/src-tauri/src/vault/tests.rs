@@ -1184,6 +1184,33 @@ fn creation_persists_only_encrypted_metadata_and_lock_clears_display_name() {
     assert_eq!(reopened.name.as_deref(), Some("Private records"));
 }
 
+#[cfg(unix)]
+#[test]
+fn unlock_rejects_a_symlinked_vault_header() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = VaultStore::new(temp.path().join("vaults"));
+    let vault = store
+        .create("Symlink guard".into(), PASSWORD.into())
+        .unwrap();
+    store.lock().unwrap();
+
+    let header = store.file_path(&vault.id).unwrap();
+    let backup = header.with_extension("backup");
+    fs::rename(&header, &backup).unwrap();
+    std::os::unix::fs::symlink(&backup, &header).unwrap();
+
+    assert_eq!(
+        store.unlock(vault.id, PASSWORD.into()).unwrap_err().code,
+        "vault_not_found"
+    );
+    assert!(
+        fs::symlink_metadata(header)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+}
+
 #[test]
 fn wrong_password_does_not_unlock_or_modify_disk() {
     let dir = TempDir::new().unwrap();

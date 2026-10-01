@@ -195,15 +195,13 @@ impl VaultStore {
             return Err(VaultError::busy());
         }
         let path = self.file_path(&id)?;
-        let meta = fs::symlink_metadata(&path)
-            .map_err(|_| VaultError::new("vault_not_found", "This local vault does not exist."))?;
-        if !meta.file_type().is_file() || meta.len() > RECORD_MAX_BYTES {
-            return Err(VaultError::new(
-                "invalid_vault_record",
-                "The vault header is invalid.",
-            ));
-        }
-        let bytes = fs::read(path).map_err(|_| VaultError::storage())?;
+        let bytes = crate::file_crypto::read_regular(&path, RECORD_MAX_BYTES).map_err(|error| {
+            if error.code == "file_unavailable" {
+                VaultError::new("vault_not_found", "This local vault does not exist.")
+            } else {
+                VaultError::new("invalid_vault_record", "The vault header is invalid.")
+            }
+        })?;
         let record: VaultRecord = serde_json::from_slice(&bytes)
             .map_err(|_| VaultError::new("invalid_vault_record", "The vault header is invalid."))?;
         if record.version != 1 || record.id != id {

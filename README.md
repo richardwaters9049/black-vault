@@ -66,20 +66,23 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D w
 npm run desktop:build
 ~~~
 
-`start.sh` is a macOS/Unix development convenience; it is not the product launcher. End users run the native Tauri package. See [desktop/README.md](desktop/README.md) for the desktop development and IPC details.
+`start.sh` is the active desktop development convenience; it does not start Docker, PostgreSQL, the historical API or the historical web client. End users run the native Tauri package. See [desktop/README.md](desktop/README.md) for desktop development and IPC details.
+
+The preserved web-era stack has its own entry point at [`legacy/`](legacy/README.md). It is retained for historical and cryptographic compatibility work only.
 
 ## Repository layout
 
 ~~~text
 black-vault/
 ├── desktop/          Active Tauri + React + Rust desktop application
+├── legacy/           Entry point and guidance for the preserved web-era stack
 ├── backend/          Preserved legacy Rust/Axum implementation and crypto reference
 ├── frontend/         Preserved legacy Next.js web application
-├── tests/fixtures/   Shared cryptographic compatibility vectors
+├── tests/fixtures/   Architecture-neutral cryptographic compatibility vectors
 └── docs/             Architecture, sprint, release and engineering documentation
 ~~~
 
-The web frontend/backend are historical reference implementations, **not** the active Black Vault product.
+The web frontend/backend are historical reference implementations, **not** the active Black Vault product. Normal development, testing and packaging should use `desktop/` and the root `start.sh`.
 
 ## Documentation
 

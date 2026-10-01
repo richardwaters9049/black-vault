@@ -100,7 +100,7 @@ export const api = {
 
   async healthCheck(): Promise<string> {
     const response = await fetch(`${API_URL}/health`);
-    return response.text();
+    return handleResponse<string>(response);
   },
 
   async setupVault(

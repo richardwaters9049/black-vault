@@ -21,6 +21,7 @@ pub(crate) enum IdentityStoreError {
     Corrupt,
     StorageFailure,
     CryptoFailure,
+    ConfirmationRequired,
 }
 
 pub(crate) trait SecretStore {
@@ -63,7 +64,18 @@ impl<S: SecretStore> IdentityManager<S> {
         Ok(self.load_or_create()?.public_identity())
     }
 
-    pub(crate) fn rotate(&self) -> Result<PublicIdentity, IdentityStoreError> {
+    /// Replaces both long-term transfer keys.
+    ///
+    /// Callers must require an explicit user confirmation because contacts
+    /// must independently verify the new fingerprint after this succeeds.
+    pub(crate) fn rotate_after_confirmation(
+        &self,
+        confirmed: bool,
+    ) -> Result<PublicIdentity, IdentityStoreError> {
+        if !confirmed {
+            return Err(IdentityStoreError::ConfirmationRequired);
+        }
+
         let identity =
             TransferIdentity::generate().map_err(|_| IdentityStoreError::CryptoFailure)?;
         self.persist(&identity)?;
@@ -204,10 +216,22 @@ mod tests {
     }
 
     #[test]
+    fn rotation_requires_explicit_confirmation() {
+        let manager = IdentityManager::new(MemoryStore::default());
+        let before = manager.public_identity().unwrap();
+
+        assert!(matches!(
+            manager.rotate_after_confirmation(false),
+            Err(IdentityStoreError::ConfirmationRequired)
+        ));
+        assert_eq!(manager.public_identity().unwrap(), before);
+    }
+
+    #[test]
     fn rotation_replaces_both_identity_keys() {
         let manager = IdentityManager::new(MemoryStore::default());
         let before = manager.public_identity().unwrap();
-        let after = manager.rotate().unwrap();
+        let after = manager.rotate_after_confirmation(true).unwrap();
 
         assert_ne!(before.recipient_key, after.recipient_key);
         assert_ne!(before.signing_key, after.signing_key);
@@ -221,7 +245,7 @@ mod tests {
         manager.store.fail_next_set();
 
         assert!(matches!(
-            manager.rotate(),
+            manager.rotate_after_confirmation(true),
             Err(IdentityStoreError::StorageFailure)
         ));
         assert_eq!(manager.public_identity().unwrap(), before);

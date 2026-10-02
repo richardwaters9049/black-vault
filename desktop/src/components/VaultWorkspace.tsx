@@ -72,7 +72,7 @@ export default function VaultWorkspace({ ready, onLocked }: Props) {
         <h2 id="vault-workspace-title" className="flex items-center gap-2 text-sm font-medium"><KeyRound size={16} className="text-blue-400" /> Vault workspace</h2>
         <p className="mt-1 text-xs text-slate-500">Offline vault creation, password-based unlock and explicit locking.</p>
       </div>
-      <span className="rounded-full border border-blue-400/20 bg-blue-500/5 px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-blue-300">Sprint 02 foundation</span>
+      <span className="rounded-full border border-blue-400/20 bg-blue-500/5 px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-blue-300">Offline security boundary</span>
     </div>
     <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_1fr]">
       <div>

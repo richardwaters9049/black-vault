@@ -36,8 +36,8 @@ export default function ExampleFiles({ onSelect, decryptFiles = [], onDecryptSel
       className={"grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none " + (encryptOpen ? "grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0")}>
       <div className="min-h-0 overflow-hidden"><div className="space-y-2">
     {examples.map(sample => <button type="button" key={sample.id} draggable onClick={() => onSelect(sample.id)}
-      onDragStart={event => { activeExampleDrag = sample.id; console.info('[vault-drop][ui] example drag started', { id: sample.id }); event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(EXAMPLE_DRAG_TYPE, sample.id); event.dataTransfer.setData('text/plain', 'black-vault-example:' + sample.id); }}
-      onDragEnd={() => { console.info('[vault-drop][ui] example drag ended', { id: sample.id }); window.setTimeout(() => { if (activeExampleDrag === sample.id) activeExampleDrag = null; }, 100); }}
+      onDragStart={event => { activeExampleDrag = sample.id; event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(EXAMPLE_DRAG_TYPE, sample.id); event.dataTransfer.setData('text/plain', 'black-vault-example:' + sample.id); }}
+      onDragEnd={() => { window.setTimeout(() => { if (activeExampleDrag === sample.id) activeExampleDrag = null; }, 100); }}
       className="flex w-full cursor-grab items-start gap-2 rounded-lg border border-blue-400/10 bg-[#101b2c] p-2 text-left transition-colors hover:border-sky-400/50 hover:bg-blue-500/10 active:cursor-grabbing"
       title={'Click to select or drag ' + sample.name + ' into Encryption'}>
       <GripVertical size={14} className="mt-0.5 shrink-0 text-blue-400" />
@@ -57,7 +57,7 @@ export default function ExampleFiles({ onSelect, decryptFiles = [], onDecryptSel
     <p className="px-2 text-[10px] leading-4 text-slate-500">Actual encrypted files in the unlocked vault. Encrypt an example first to add it here.</p>
     {decryptFiles.length === 0 ? <p className="px-2 text-[11px] text-slate-500">No encrypted files yet.</p> : decryptFiles.map(file =>
       <button key={file.id} type="button" draggable onClick={() => onDecryptSelect?.(file.id)}
-        onDragStart={event => { activeDecryptDrag = file.id; console.info('[vault-drop][ui] encrypted file drag started', { id: file.id.slice(0, 8) }); event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-black-vault-encrypted-file', file.id); event.dataTransfer.setData('text/plain', 'black-vault-file:' + file.id); }}
+        onDragStart={event => { activeDecryptDrag = file.id; event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-black-vault-encrypted-file', file.id); event.dataTransfer.setData('text/plain', 'black-vault-file:' + file.id); }}
         onDragEnd={() => { window.setTimeout(() => { if (activeDecryptDrag === file.id) activeDecryptDrag = null; }, 100); }}
         className="flex w-full cursor-grab items-center gap-2 rounded-lg border border-blue-400/10 bg-[#101b2c] p-2 text-left text-[11px] text-slate-200 transition-colors hover:border-sky-400/50 hover:bg-blue-500/10 active:cursor-grabbing">
         <GripVertical size={14} className="shrink-0 text-blue-400"/><LockKeyhole size={14} className="shrink-0 text-sky-300"/><span className="min-w-0 break-all">{file.name}</span>

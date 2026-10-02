@@ -4,4 +4,4 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-exec "$PROJECT_ROOT/start.sh" "$@"
+exec "$PROJECT_ROOT/legacy/start.sh" "${1:-start}"

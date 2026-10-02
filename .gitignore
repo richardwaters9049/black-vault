@@ -20,3 +20,7 @@
 
 # Docker
 .env.docker
+
+# Local portfolio and recording assets
+demo-recording/
+screenshots/

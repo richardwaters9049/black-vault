@@ -57,6 +57,12 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: macOS Keychain acceptance
+        if: runner.os == 'macOS'
+        run: cargo test --manifest-path src-tauri/Cargo.toml identity_store::tests::macos_keychain_binary_secret_round_trip -- --ignored
+      - name: Windows Credential Manager acceptance
+        if: runner.os == 'Windows'
+        run: cargo test --manifest-path src-tauri/Cargo.toml identity_store::tests::windows_credential_manager_binary_secret_round_trip -- --ignored
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: Build native release package
         run: npm run tauri -- build --bundles ${{ matrix.bundles }}

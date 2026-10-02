@@ -50,6 +50,11 @@ impl ErrorResponse {
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
+        if status == StatusCode::INTERNAL_SERVER_ERROR {
+            eprintln!("[black-vault-api] internal service error (details withheld)");
+            return Self::internal_server_error("Internal server error");
+        }
+
         Self { status, error }
     }
 }
@@ -70,5 +75,26 @@ impl IntoResponse for ErrorResponse {
         let status = self.status;
 
         (status, Json(self)).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_service_errors_are_not_exposed() {
+        let response = ErrorResponse::from_service_error("database connection details".into());
+
+        assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.error, "Internal server error");
+    }
+
+    #[test]
+    fn known_service_errors_keep_their_client_message() {
+        let response = ErrorResponse::from_service_error("Invalid email or password".into());
+
+        assert_eq!(response.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(response.error, "Invalid email or password");
     }
 }

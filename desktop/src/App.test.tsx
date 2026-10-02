@@ -15,6 +15,7 @@ let locks: number;
 let invalidPassword: boolean;
 
 beforeEach(async () => {
+  vi.useFakeTimers();
   vi.stubGlobal('isTauri', true);
   vaults = [];
   locks = 0;
@@ -45,10 +46,10 @@ beforeEach(async () => {
   root = createRoot(host);
   await act(async () => { root.render(<App />); });
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 async function ready() {
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 2900)); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(2800); });
 }
 async function input(label: string, value: string) {
   const element = host.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);

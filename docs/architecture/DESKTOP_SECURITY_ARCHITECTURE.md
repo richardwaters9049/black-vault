@@ -1,64 +1,85 @@
 # Black Vault — Desktop Security Architecture
 
-**Draft date:** 29 September 2026  
-**Status:** Proposed design for review; only Sprint 01 desktop scaffolding is implemented.
+**Updated:** 1 October 2026
+**Status:** As-built security architecture for Black Vault 0.1.0.
 
-## 1. Scope and security objectives
+## Security objectives
 
-An offline-first desktop application built with Tauri 2, React/Vite/TypeScript and Rust. Core vault operations require no account, remote API, Docker, PostgreSQL or cloud service. Initial distribution target: macOS Apple Silicon. Preserve legacy encrypted formats and tests.
+Black Vault protects locally persisted vault metadata, filenames and file contents against offline inspection and unauthorised modification while a vault is locked. It minimises plaintext persistence, keeps privileged filesystem operations behind Rust/Tauri, and fails closed when authenticated encrypted records are malformed or tampered with.
 
-Protect persistent file contents, filenames, sensitive metadata and cryptographic keys against offline inspection of a locked vault. Minimise exposure during an unlocked session. Do not promise protection against malware or an administrator controlling an already-unlocked host, perfect memory erasure, or detection of deletion/rollback without an independent trusted baseline.
+It does **not** claim protection against a compromised host while unlocked, administrator-level memory inspection, guaranteed erasure from every OS-managed memory copy, physical power-loss durability on every filesystem, rollback detection without an independent trusted baseline, forgotten-password recovery, or independent security certification.
 
-## 2. Trust boundaries
+## Trust boundaries
 
-- React/WebView: presentation and authorised typed command requests only; never persist plaintext master keys or accept arbitrary filesystem paths as authorisation.
-- Rust vault manager: owns sessions, passwords during derivation, keys, file handles, crypto and storage. Keep errors minimal and never log filenames, plaintext, passwords, paths or keys.
-- Vaults: each has an independent random 256-bit master key, metadata and lifecycle. A compromise of the common process may affect all unlocked vaults; this is cryptographic compartmentalisation, not Qubes-style OS isolation.
-- Persistent filesystem: assume an attacker can read, copy, corrupt, delete or replace local files. All sensitive persisted metadata and contents must be authenticated and encrypted.
-- Future recipient identity: independent of vault master keys and protected separately.
+### React/WebView
 
-## 3. Proposed key hierarchy
+The WebView is presentation rather than the cryptographic authority. It requests operations through Tauri commands and receives authorised metadata/plaintext only when required for the current unlocked workflow. It does not receive vault master keys or arbitrary native filesystem authority.
+
+The production CSP permits only the local application origin and Tauri IPC connection required by the runtime. Capabilities are scoped to the `main` window. Shell/process execution is not exposed.
+
+### Rust/Tauri core
+
+Rust owns vault sessions, cryptographic operations, native filesystem access, import screening and persistence/recovery. Password arguments are wrapped in zeroising buffers at the command/storage boundary. Active vault names and master keys use `Zeroizing` containers where practical.
+
+Error messages are intentionally bounded so internal paths, keys and low-level storage details are not returned to the WebView.
+
+### Local filesystem
+
+The filesystem is treated as attacker-readable and attacker-modifiable while the vault is locked. Sensitive persistent values therefore require authenticated encryption. An attacker may still delete or roll back encrypted files; AES-GCM authenticity alone cannot prove freshness.
+
+## Key hierarchy
 
 ```text
-Vault password --Argon2id--> wrapping key
-                              |
-                       wrapped vault key
-                              |
-                    independent vault master key
-                              |
-                  wrapped random per-file keys
-                              |
-                  encrypted content and filename
-
-Separate recipient/device private identity key
-     -> public-key sharing; never export vault master key
+Master password
+      │
+      ▼
+Argon2id (19,456 KiB, 2 iterations, parallelism 1)
+      │ 16-byte random salt
+      ▼
+256-bit wrapping key
+      │
+      ├── authenticated encrypted vault metadata
+      └── wraps random 256-bit vault master key
+                              │
+                              ▼
+                  per-file authenticated encryption
+                  encrypted filename + contents
 ```
 
-Reuse the canonical legacy Argon2id implementation and compatibility fixtures where applicable. Keep cryptographic versions explicit. Legacy salt-text recovery must be explicitly requested only for proven legacy records. Use fresh, domain-separated AES-256-GCM operations; never reuse a nonce with a key. Do not design new sharing crypto by improvising key conversion or inventing formats without review.
+The vault-header KDF record is versioned and validated before expensive derivation. Unsupported parameters fail closed. AES-GCM uses fresh random 96-bit nonces and contextual associated data.
 
-## 4. Proposed ephemeral metadata experiment
+File ciphertext is bound to its vault and file identifiers. Tests verify wrong keys, tampering and cross-vault ciphertext substitution fail authentication.
 
-For each unlocked vault, prototype an SQLite in-memory connection populated only after authenticating and decrypting the vault's persisted metadata. Evaluate SQLite temporary storage, journalling, attached databases, extensions, backups, crash dumps and OS swapping; do not claim RAM-only execution eliminates every physical trace. Restrict SQLite's configuration and test for accidental plaintext files.
+## Nested vaults
 
-On successful mutation, write an authenticated encrypted checkpoint through a temporary file, flush/synchronise as appropriate and atomically replace the previous checkpoint. Include generation/version and recovery logic. A save-on-lock-only strategy is unacceptable because a crash would lose an entire session. Design a recoverable backup scheme without silently accepting stale or rolled-back state.
+Nested vaults add a second local authentication boundary inside an unlocked parent vault. A four-digit PIN is processed with Argon2id, and the nested payload is additionally protected by the parent vault master key. Opening it therefore requires an unlocked parent and the correct PIN.
 
-Lock must close active database connections, invalidate commands/sessions and clear accessible Rust secret buffers. Test in-flight operations and late completions so they cannot reopen a locked vault. Password changes should rewrap the vault key rather than silently rewrite every file.
+Repeated incorrect PIN attempts are throttled in the active session, and all PIN-authenticated nested operations use the same attempt controls. A four-digit PIN is a convenience boundary, not equivalent to a high-entropy master password.
 
-## 5. File storage and sharing roadmap
+## File handling
 
-Store encrypted file blobs separately from encrypted metadata. Preserve the legacy version 2 AES-GCM AAD domains and payload conventions for deliberate compatibility/import. Revalidate selected paths at the time of opening; protect against symlink/path races and unsafe export destinations. Do not lift the current 5 MiB web limit until chunked authenticated encryption, nonce allocation, size quotas and interrupted-write recovery are designed.
+Imports are read through bounded regular-file helpers. On Unix, no-follow opening rejects symlinks and metadata is checked after opening. Vault headers use the same hardened read path.
 
-Later, define a versioned `.bvault` package using independently generated recipient/device identity keys, verified public-key fingerprints, recipient-specific wrapped file keys and authenticated metadata. Never share a vault password or vault master key. Support offline export/import first; LAN transport and optional encrypted relay come afterwards.
+The offline import scanner blocks high-confidence executable/script/container indicators, macro-capable extensions, the EICAR test signature and a small set of high-risk command patterns. It is a policy gate, **not antivirus**, malware detection or a safety verdict.
 
-## 6. Audit, integrity and recovery
+The current plaintext import limit is 5 MiB. Exports authenticate encrypted data before producing plaintext and refuse unsafe overwrites. Decrypt-in-vault verification does not create a plaintext copy in vault storage.
 
-Sensitive actions should eventually produce a durable, minimised and tamper-evident local audit trail. Ordinary process diagnostics are not durable audit. AES-GCM detects unauthorised modifications to authenticated data but does not alone prevent deletion, replay or rollback. Specify trusted baseline, backup and recovery-key policies before claiming those protections.
+## Persistence and recovery
 
-## 7. Sprint 02 acceptance
+New and updated encrypted records use create-new temporary files where applicable, `sync_all`, rename and directory synchronisation. Unix files/directories receive restrictive modes where supported.
 
-- Existing Rust and TypeScript vectors and legacy regression tests remain green.
-- Native bundled macOS app and picker manually verified.
-- Architecture and versioned storage design reviewed before persistence format is fixed.
-- Prototype creates independent vaults, rejects wrong passwords/tampering, locks and restarts without plaintext persistent metadata.
-- Tests cover mutation checkpoints, crash/interrupted writes, database temporary files, session invalidation and corrupt backups.
-- No automatic commits, pushes, destructive migrations or claims that planned controls are already implemented.
+Nested transfer and restore operations use explicit persistence ordering. If interrupted, the design prefers recoverable duplicate ciphertext over losing the only authenticated copy. Recovery recognises narrowly defined staging files and validates corresponding encrypted state before cleanup.
+
+The Rust suite includes fault matrices and a real subprocess interruption matrix around these boundaries.
+
+## Session lifecycle
+
+Only one root vault is active at a time. Explicit lock/sign-out and five minutes of inactivity clear the active session. Master-key material is held in best-effort-zeroising Rust containers and is never exposed through the JavaScript API.
+
+Zeroisation reduces accidental retention; it is not a guarantee against compiler, allocator, swap, crash-dump or hostile-process copies.
+
+## Security verification
+
+The hardened baseline includes 46 Rust tests, 22 frontend tests, strict Clippy/Rustfmt verification, a production TypeScript/Vite build, production-bundle development-secret checks, `npm audit` with zero known vulnerabilities, and RustSec `cargo audit` with zero vulnerability advisories at the final audit.
+
+See [Threat Model](../security/THREAT_MODEL.md) and [v0.1.0 Validation](../release/v0.1.0-validation.md).

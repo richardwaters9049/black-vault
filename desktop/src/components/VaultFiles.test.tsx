@@ -4,11 +4,15 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import VaultFiles from './VaultFiles';
 
-const eventCallbacks = vi.hoisted(() => new Map<string, () => void | Promise<void>>());
+const eventState = vi.hoisted(() => ({
+  callbacks: new Map<string, () => void | Promise<void>>(),
+  failListener: '',
+}));
 vi.mock('@tauri-apps/api/event', () => ({
   listen: async (name: string, callback: () => void | Promise<void>) => {
-    eventCallbacks.set(name, callback);
-    return () => { eventCallbacks.delete(name); };
+    if (eventState.failListener === name) throw new Error('listener unavailable');
+    eventState.callbacks.set(name, callback);
+    return () => { eventState.callbacks.delete(name); };
   },
 }));
 vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => ({ onDragDropEvent: async () => () => {} }) }));
@@ -20,7 +24,7 @@ let files: Array<{ id: string; name: string; sizeBytes: number }>;
 const id = '0123456789abcdef0123456789abcdef';
 beforeEach(async () => {
   vi.stubGlobal('isTauri', true);
-  calls = []; files = []; eventCallbacks.clear();
+  calls = []; files = []; eventState.callbacks.clear(); eventState.failListener = '';
   mockIPC((command) => {
     calls.push(command);
     if (command === 'list_vault_files') return files;
@@ -96,7 +100,7 @@ it('stages an example selected by clicking the sidebar, without relying on nativ
 
 it('stages a native Finder file and replaces the previous selection on a second drop', async () => {
   await act(async () => { await Promise.resolve(); });
-  const dropped = eventCallbacks.get('black-vault-file-staged');
+  const dropped = eventState.callbacks.get('black-vault-file-staged');
   if (!dropped) throw new Error('Native drop listener missing');
   await act(async () => { await dropped(); });
   expect(host.textContent).toContain('finder-file.txt');
@@ -107,4 +111,14 @@ it('stages a native Finder file and replaces the previous selection on a second 
   await act(async () => { await dropped(); });
   expect(host.textContent).toContain('finder-file.txt');
   expect(host.textContent).not.toContain('example-notes.txt selected');
+});
+
+it('surfaces native listener registration failures without logging sensitive details', async () => {
+  const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+  eventState.failListener = 'black-vault-file-drop-multiple';
+  await click('Decryption');
+  await act(async () => { await Promise.resolve(); });
+  expect(host.textContent).toContain('listener unavailable');
+  expect(error).toHaveBeenCalledWith('[vault-drop][ui] failed to register multi-drop listener (details withheld)');
+  error.mockRestore();
 });

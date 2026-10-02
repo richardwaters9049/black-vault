@@ -7,18 +7,19 @@ use black_vault_api::database::users::create_user;
 use black_vault_api::services::auth::hash_password;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), String> {
     dotenv().ok();
 
     tracing_subscriber::fmt::init();
 
-    let config = Config::from_env().expect("Failed to load application configuration");
+    let config = Config::from_env()
+        .map_err(|error| format!("Failed to load application configuration: {error}"))?;
 
     tracing::info!("Connecting to database...");
 
     let pool = database::connect(&config.database_url)
         .await
-        .expect("Failed to connect to database");
+        .map_err(|error| format!("Failed to connect to database: {error}"))?;
 
     tracing::info!("Database connected");
 
@@ -27,11 +28,11 @@ async fn main() {
     sqlx::migrate!("./migrations")
         .run(&pool)
         .await
-        .expect("Failed to run database migrations");
+        .map_err(|error| format!("Failed to run database migrations: {error}"))?;
 
     tracing::info!("Database migrations complete");
 
-    seed_demo_user(&pool).await;
+    seed_demo_user(&pool).await?;
 
     let app = create_app(pool, config.clone());
 
@@ -39,7 +40,7 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(&address)
         .await
-        .expect("Failed to bind server");
+        .map_err(|error| format!("Failed to bind server: {error}"))?;
 
     tracing::info!(
         "Black Vault API running on http://{}:{}",
@@ -47,10 +48,14 @@ async fn main() {
         config.port
     );
 
-    axum::serve(listener, app).await.expect("Server error");
+    axum::serve(listener, app)
+        .await
+        .map_err(|error| format!("Server error: {error}"))?;
+
+    Ok(())
 }
 
-async fn seed_demo_user(pool: &sqlx::PgPool) {
+async fn seed_demo_user(pool: &sqlx::PgPool) -> Result<(), String> {
     let enabled = std::env::var("DEMO_USER_ENABLED")
         .map(|value| value.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
@@ -58,7 +63,7 @@ async fn seed_demo_user(pool: &sqlx::PgPool) {
     if !enabled {
         tracing::debug!("Demo user seeding disabled");
 
-        return;
+        return Ok(());
     }
 
     let email =
@@ -76,12 +81,12 @@ async fn seed_demo_user(pool: &sqlx::PgPool) {
         }
 
         Ok(None) => {
-            let password_hash =
-                hash_password(&password).expect("Failed to hash demo user password");
+            let password_hash = hash_password(&password)
+                .map_err(|_| "Failed to hash demo user password".to_string())?;
 
             create_user(pool, &email, &password_hash)
                 .await
-                .expect("Failed to create development demo user");
+                .map_err(|error| format!("Failed to create development demo user: {error}"))?;
 
             tracing::info!(
                 email = %email,
@@ -96,7 +101,9 @@ async fn seed_demo_user(pool: &sqlx::PgPool) {
                 "Failed to check for development demo user"
             );
 
-            panic!("Failed to check for development demo user");
+            return Err("Failed to check for development demo user".to_string());
         }
     }
+
+    Ok(())
 }

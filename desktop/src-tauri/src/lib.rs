@@ -9,6 +9,7 @@ macro_rules! debug_trace {
 }
 
 mod commands;
+mod contacts;
 mod file_crypto;
 mod identity_store;
 mod import_scan;

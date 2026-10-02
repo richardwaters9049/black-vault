@@ -82,9 +82,43 @@ The outer header contains only information required to route and verify the pack
 
 ## Canonical encoding
 
-Signatures require one deterministic byte representation. The implementation must choose and document a canonical binary encoding before signatures are added. Rust structures must not be signed by serialising an implementation-dependent in-memory representation.
+Protocol v1 uses an explicit big-endian binary encoding. It does not use Rust's in-memory representation or a general-purpose serializer for signed bytes.
 
-Unknown critical fields cause rejection. Version upgrades must be explicit rather than guessed.
+The v1 outer package fields are encoded in this exact order:
+
+```text
+8 bytes   magic = BLKVAULT
+2 bytes   version = 0x0001
+2 bytes   HPKE KEM ID = 0x0020 (DHKEM X25519/HKDF-SHA256)
+2 bytes   HPKE KDF ID = 0x0001 (HKDF-SHA256)
+2 bytes   HPKE AEAD ID = 0x0002 (AES-256-GCM)
+16 bytes  random package ID
+16 bytes  recipient key ID
+16 bytes  sender signing-key ID
+32 bytes  HPKE encapsulated key
+8 bytes   ciphertext length, unsigned big-endian
+N bytes   HPKE ciphertext
+64 bytes  Ed25519 signature
+```
+
+The Ed25519 signature covers every preceding byte, including the ciphertext length and ciphertext. HPKE associated data independently binds the package ID, recipient key ID and sender signing-key ID to payload authentication.
+
+Protocol v1 has no optional or unknown fields. Any unsupported version, algorithm identifier, inconsistent length, truncation or trailing byte fails closed. Future extensibility requires a new explicitly reviewed version rather than parser guesswork.
+
+### Interoperability and parser validation
+
+The selected HPKE suite is checked against an RFC 9180 known-answer vector for base mode with X25519/HKDF-SHA256/AES-256-GCM, rather than relying only on Black Vault encrypt/decrypt round trips.
+
+The production byte parser is isolated in `src/transfer_codec.rs`. Unit tests exercise deterministic truncation, mutation and arbitrary-input corpora. The same parser source is compiled by the libFuzzer target in `fuzz/fuzz_targets/transfer_decode.rs`, avoiding a test-only parser implementation.
+
+Fuzzing is a developer security gate and does not change the project's stable Rust toolchain. Run it explicitly with nightly:
+
+```bash
+cd desktop/src-tauri
+cargo +nightly fuzz run transfer_decode fuzz/corpus/transfer_decode -- -max_total_time=60 -max_len=8192
+```
+
+A bounded 20-second AddressSanitizer/libFuzzer run completed during Phase A with 16,282,808 executions and no crash. Longer fuzzing remains appropriate before a high-assurance release.
 
 ## Replay and rollback
 

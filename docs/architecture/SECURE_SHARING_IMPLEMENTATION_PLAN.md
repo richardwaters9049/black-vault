@@ -32,13 +32,18 @@ Exit gate: Rust can create and open a package entirely in memory, including wron
 
 Implement a small Rust key-storage abstraction.
 
-Targets:
+Current design:
 
-- macOS: Keychain/Secure Enclave-compatible protection where the chosen key type/API permits it;
-- Windows: platform-protected credential/key storage;
-- Linux: supported secret-service/keyring path with an explicit fallback policy.
+- store the versioned X25519 private key and Ed25519 seed as one binary credential;
+- use macOS Keychain, Windows Credential Manager and Linux Secret Service;
+- fail explicitly if secure storage is unavailable; there is no plaintext file fallback;
+- derive public keys and fingerprints from the private identity instead of persisting a second source of truth;
+- treat corrupt or unknown identity records as errors rather than silently replacing the user's identity;
+- keep creation, loading, deletion and rotation entirely Rust-side.
 
-Do not claim hardware-backed or non-exportable keys unless the actual platform API and generated key type guarantee it.
+Do not claim Secure Enclave, hardware-backed or non-exportable keys: the selected cross-platform credential API does not guarantee those properties for these key types.
+
+Platform evidence starts with an explicit macOS Keychain binary-secret acceptance test. Windows Credential Manager and Linux Secret Service require their own cross-platform CI/manual acceptance gates.
 
 Exit gate: private identity material survives restart without entering WebView/browser storage and has platform-specific tests/manual acceptance.
 

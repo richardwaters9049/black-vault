@@ -10,7 +10,10 @@ macro_rules! debug_trace {
 
 mod commands;
 mod file_crypto;
+mod identity_store;
 mod import_scan;
+mod transfer;
+mod transfer_codec;
 mod vault;
 
 pub(crate) fn context<R: tauri::Runtime>() -> tauri::Context<R> {

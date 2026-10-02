@@ -9,7 +9,15 @@ This directory contains the engineering record for Black Vault. For the current 
 3. [Threat model](security/THREAT_MODEL.md) — assets, attacker assumptions, controls and residual limitations.
 4. [v0.1.0 validation record](release/v0.1.0-validation.md) — final test, audit and CI evidence.
 
-If an older sprint or release-candidate document conflicts with these files, the current authoritative documents take precedence.
+## Secure sharing design — planned
+
+The following documents define the next architecture phase. They are design requirements, not claims about the current v0.1.0 implementation.
+
+- [Secure Transfer Protocol](security/SECURE_TRANSFER_PROTOCOL.md) — recipient encryption, sender authentication, package format and identity lifecycle.
+- [Transfer Threat Model](security/TRANSFER_THREAT_MODEL.md) — hostile-channel threats, controls and residual limitations.
+- [Secure Sharing Implementation Plan](architecture/SECURE_SHARING_IMPLEMENTATION_PLAN.md) — phased engineering and acceptance gates.
+
+If an older sprint or release-candidate document conflicts with the current implemented architecture, the current authoritative documents take precedence.
 
 ## Project context
 

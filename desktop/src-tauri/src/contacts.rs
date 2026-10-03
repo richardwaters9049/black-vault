@@ -2,10 +2,19 @@
 
 use crate::transfer::PublicIdentity;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 const IDENTITY_MAGIC: &str = "BLACKVAULT-IDENTITY";
 const IDENTITY_VERSION: u16 = 1;
+const STORE_MAGIC: &str = "BLACKVAULT-CONTACTS";
+const STORE_VERSION: u16 = 1;
+const STORE_FILE: &str = "contacts.json";
+const MAX_STORE_BYTES: u64 = 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -21,6 +30,7 @@ pub(crate) struct Contact {
     pub name: String,
     pub identity: PublicIdentity,
     pub trust: TrustState,
+    pub previous_verified_fingerprint: Option<[u8; 32]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +39,8 @@ pub(crate) enum ContactError {
     InvalidName,
     NotFound,
     VerificationMismatch,
+    CorruptStore,
+    StorageFailure,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,6 +50,24 @@ struct IdentityDocument {
     version: u16,
     recipient_key: String,
     signing_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredContact {
+    name: String,
+    recipient_key: String,
+    signing_key: String,
+    trust: TrustState,
+    previous_verified_fingerprint: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ContactStoreDocument {
+    magic: String,
+    version: u16,
+    contacts: Vec<StoredContact>,
 }
 
 #[derive(Default)]
@@ -56,6 +86,11 @@ impl ContactBook {
         match self.contacts.get_mut(&name) {
             Some(existing) if existing.identity == identity => Ok(existing.trust),
             Some(existing) => {
+                existing.previous_verified_fingerprint = match existing.trust {
+                    TrustState::Verified => Some(existing.identity.fingerprint()),
+                    TrustState::KeyChanged => existing.previous_verified_fingerprint,
+                    TrustState::Unverified | TrustState::Revoked => None,
+                };
                 existing.identity = identity;
                 existing.trust = TrustState::KeyChanged;
                 Ok(TrustState::KeyChanged)
@@ -67,6 +102,7 @@ impl ContactBook {
                         name,
                         identity,
                         trust: TrustState::Unverified,
+                        previous_verified_fingerprint: None,
                     },
                 );
                 Ok(TrustState::Unverified)
@@ -85,17 +121,155 @@ impl ContactBook {
         }
 
         contact.trust = TrustState::Verified;
+        contact.previous_verified_fingerprint = None;
         Ok(())
     }
 
     pub(crate) fn revoke(&mut self, name: &str) -> Result<(), ContactError> {
         let contact = self.contacts.get_mut(name).ok_or(ContactError::NotFound)?;
         contact.trust = TrustState::Revoked;
+        contact.previous_verified_fingerprint = None;
         Ok(())
     }
 
     pub(crate) fn get(&self, name: &str) -> Option<&Contact> {
         self.contacts.get(name)
+    }
+
+    fn to_document(&self) -> ContactStoreDocument {
+        ContactStoreDocument {
+            magic: STORE_MAGIC.to_owned(),
+            version: STORE_VERSION,
+            contacts: self
+                .contacts
+                .values()
+                .map(|contact| StoredContact {
+                    name: contact.name.clone(),
+                    recipient_key: encode_hex(&contact.identity.recipient_key),
+                    signing_key: encode_hex(&contact.identity.signing_key),
+                    trust: contact.trust,
+                    previous_verified_fingerprint: contact
+                        .previous_verified_fingerprint
+                        .as_ref()
+                        .map(|fingerprint| encode_hex(fingerprint)),
+                })
+                .collect(),
+        }
+    }
+
+    fn from_document(document: ContactStoreDocument) -> Result<Self, ContactError> {
+        if document.magic != STORE_MAGIC || document.version != STORE_VERSION {
+            return Err(ContactError::CorruptStore);
+        }
+
+        let mut contacts = BTreeMap::new();
+        for stored in document.contacts {
+            let name = validate_name(&stored.name).map_err(|_| ContactError::CorruptStore)?;
+            if contacts.contains_key(&name) {
+                return Err(ContactError::CorruptStore);
+            }
+
+            let identity = PublicIdentity {
+                recipient_key: decode_hex_32(&stored.recipient_key)
+                    .map_err(|_| ContactError::CorruptStore)?,
+                signing_key: decode_hex_32(&stored.signing_key)
+                    .map_err(|_| ContactError::CorruptStore)?,
+            };
+            let previous_verified_fingerprint = stored
+                .previous_verified_fingerprint
+                .map(|value| decode_hex_32(&value).map_err(|_| ContactError::CorruptStore))
+                .transpose()?;
+
+            if stored.trust != TrustState::KeyChanged && previous_verified_fingerprint.is_some() {
+                return Err(ContactError::CorruptStore);
+            }
+
+            contacts.insert(
+                name.clone(),
+                Contact {
+                    name,
+                    identity,
+                    trust: stored.trust,
+                    previous_verified_fingerprint,
+                },
+            );
+        }
+
+        Ok(Self { contacts })
+    }
+}
+
+pub(crate) struct ContactStore {
+    root: PathBuf,
+}
+
+impl ContactStore {
+    pub(crate) fn new(root: PathBuf) -> Self {
+        Self { root }
+    }
+
+    pub(crate) fn load(&self) -> Result<ContactBook, ContactError> {
+        let path = self.root.join(STORE_FILE);
+        if !path.exists() {
+            return Ok(ContactBook::default());
+        }
+
+        let bytes = read_store_file(&path)?;
+        let document = serde_json::from_slice(&bytes).map_err(|_| ContactError::CorruptStore)?;
+        ContactBook::from_document(document)
+    }
+
+    pub(crate) fn save(&self, contacts: &ContactBook) -> Result<(), ContactError> {
+        self.ensure_root()?;
+        let bytes = serde_json::to_vec_pretty(&contacts.to_document())
+            .map_err(|_| ContactError::StorageFailure)?;
+        if bytes.len() as u64 > MAX_STORE_BYTES {
+            return Err(ContactError::StorageFailure);
+        }
+
+        let temp = self
+            .root
+            .join(format!(".contacts.{}.tmp", crate::file_crypto::random_id()));
+        let destination = self.root.join(STORE_FILE);
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        }
+
+        let result = (|| -> std::io::Result<()> {
+            let mut file = options.open(&temp)?;
+            file.write_all(&bytes)?;
+            file.sync_all()?;
+            fs::rename(&temp, &destination)?;
+            crate::file_crypto::sync_directory(&self.root)?;
+            Ok(())
+        })();
+
+        if result.is_err() {
+            crate::file_crypto::cleanup_file(&temp);
+            return Err(ContactError::StorageFailure);
+        }
+        Ok(())
+    }
+
+    fn ensure_root(&self) -> Result<(), ContactError> {
+        fs::create_dir_all(&self.root).map_err(|_| ContactError::StorageFailure)?;
+        let metadata =
+            fs::symlink_metadata(&self.root).map_err(|_| ContactError::StorageFailure)?;
+        if !metadata.file_type().is_dir() {
+            return Err(ContactError::StorageFailure);
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&self.root, fs::Permissions::from_mode(0o700))
+                .map_err(|_| ContactError::StorageFailure)?;
+        }
+        Ok(())
     }
 }
 
@@ -159,6 +333,38 @@ fn decode_hex_32(value: &str) -> Result<[u8; 32], ContactError> {
         decoded[index] = u8::from_str_radix(text, 16).map_err(|_| ContactError::InvalidIdentity)?;
     }
     Ok(decoded)
+}
+
+fn read_store_file(path: &Path) -> Result<Vec<u8>, ContactError> {
+    let metadata = fs::symlink_metadata(path).map_err(|_| ContactError::StorageFailure)?;
+    if !metadata.file_type().is_file() || metadata.len() > MAX_STORE_BYTES {
+        return Err(ContactError::CorruptStore);
+    }
+
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let file = options
+        .open(path)
+        .map_err(|_| ContactError::StorageFailure)?;
+    let opened = file.metadata().map_err(|_| ContactError::StorageFailure)?;
+    if !opened.file_type().is_file() || opened.len() > MAX_STORE_BYTES {
+        return Err(ContactError::CorruptStore);
+    }
+
+    use std::io::Read;
+    let mut bytes = Vec::with_capacity(opened.len() as usize);
+    file.take(MAX_STORE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| ContactError::StorageFailure)?;
+    if bytes.len() as u64 > MAX_STORE_BYTES {
+        return Err(ContactError::CorruptStore);
+    }
+    Ok(bytes)
 }
 
 #[cfg(test)]
@@ -232,7 +438,6 @@ mod tests {
 
         contacts.import("Alice", first.clone()).unwrap();
         contacts.verify("Alice", first.fingerprint()).unwrap();
-        assert_eq!(contacts.get("Alice").unwrap().trust, TrustState::Verified);
 
         assert_eq!(
             contacts.import("Alice", replacement.clone()).unwrap(),
@@ -241,6 +446,10 @@ mod tests {
         let contact = contacts.get("Alice").unwrap();
         assert_eq!(contact.identity, replacement);
         assert_eq!(contact.trust, TrustState::KeyChanged);
+        assert_eq!(
+            contact.previous_verified_fingerprint,
+            Some(first.fingerprint())
+        );
     }
 
     #[test]
@@ -260,6 +469,10 @@ mod tests {
 
         contacts.verify("Alice", replacement.fingerprint()).unwrap();
         assert_eq!(contacts.get("Alice").unwrap().trust, TrustState::Verified);
+        assert_eq!(
+            contacts.get("Alice").unwrap().previous_verified_fingerprint,
+            None
+        );
     }
 
     #[test]
@@ -297,6 +510,113 @@ mod tests {
         assert_eq!(
             contacts.import("Alice\nMallory", identity()),
             Err(ContactError::InvalidName)
+        );
+    }
+
+    #[test]
+    fn persisted_contacts_preserve_trust_and_key_change_history() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ContactStore::new(temp.path().join("contacts"));
+        let first = identity();
+        let replacement = identity();
+        let mut contacts = ContactBook::default();
+
+        contacts.import("Alice", first.clone()).unwrap();
+        contacts.verify("Alice", first.fingerprint()).unwrap();
+        contacts.import("Alice", replacement.clone()).unwrap();
+        store.save(&contacts).unwrap();
+
+        let loaded = store.load().unwrap();
+        let alice = loaded.get("Alice").unwrap();
+        assert_eq!(alice.identity, replacement);
+        assert_eq!(alice.trust, TrustState::KeyChanged);
+        assert_eq!(
+            alice.previous_verified_fingerprint,
+            Some(first.fingerprint())
+        );
+    }
+
+    #[test]
+    fn missing_store_loads_as_empty_contact_book() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ContactStore::new(temp.path().join("contacts"));
+
+        assert!(store.load().unwrap().get("Alice").is_none());
+    }
+
+    #[test]
+    fn corrupt_store_fails_closed() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("contacts");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join(STORE_FILE), b"{not-json").unwrap();
+
+        assert!(matches!(
+            ContactStore::new(root).load(),
+            Err(ContactError::CorruptStore)
+        ));
+    }
+
+    #[test]
+    fn duplicate_contact_names_in_store_are_rejected() {
+        let public = identity();
+        let stored = StoredContact {
+            name: "Alice".to_owned(),
+            recipient_key: encode_hex(&public.recipient_key),
+            signing_key: encode_hex(&public.signing_key),
+            trust: TrustState::Unverified,
+            previous_verified_fingerprint: None,
+        };
+        let document = ContactStoreDocument {
+            magic: STORE_MAGIC.to_owned(),
+            version: STORE_VERSION,
+            contacts: vec![stored.clone(), stored],
+        };
+
+        assert!(matches!(
+            ContactBook::from_document(document),
+            Err(ContactError::CorruptStore)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn contact_store_rejects_symlinked_store_file() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("contacts");
+        fs::create_dir_all(&root).unwrap();
+        let target = temp.path().join("target.json");
+        fs::write(&target, b"{}").unwrap();
+        symlink(&target, root.join(STORE_FILE)).unwrap();
+
+        assert!(ContactStore::new(root).load().is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn contact_store_uses_restrictive_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("contacts");
+        let store = ContactStore::new(root.clone());
+        let mut contacts = ContactBook::default();
+        contacts.import("Alice", identity()).unwrap();
+        store.save(&contacts).unwrap();
+
+        assert_eq!(
+            fs::metadata(&root).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(
+            fs::metadata(root.join(STORE_FILE))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
         );
     }
 }

@@ -11,6 +11,7 @@ use std::{
 
 const IDENTITY_MAGIC: &str = "BLACKVAULT-IDENTITY";
 const IDENTITY_VERSION: u16 = 1;
+const MAX_IDENTITY_DOCUMENT_BYTES: usize = 4096;
 const STORE_MAGIC: &str = "BLACKVAULT-CONTACTS";
 const STORE_VERSION: u16 = 1;
 const STORE_FILE: &str = "contacts.json";
@@ -70,7 +71,7 @@ struct ContactStoreDocument {
     contacts: Vec<StoredContact>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct ContactBook {
     contacts: BTreeMap<String, Contact>,
 }
@@ -134,6 +135,10 @@ impl ContactBook {
 
     pub(crate) fn get(&self, name: &str) -> Option<&Contact> {
         self.contacts.get(name)
+    }
+
+    pub(crate) fn list(&self) -> Vec<Contact> {
+        self.contacts.values().cloned().collect()
     }
 
     fn to_document(&self) -> ContactStoreDocument {
@@ -285,6 +290,10 @@ pub(crate) fn export_public_identity(identity: &PublicIdentity) -> Result<Vec<u8
 }
 
 pub(crate) fn import_public_identity(bytes: &[u8]) -> Result<PublicIdentity, ContactError> {
+    if bytes.len() > MAX_IDENTITY_DOCUMENT_BYTES {
+        return Err(ContactError::InvalidIdentity);
+    }
+
     let document: IdentityDocument =
         serde_json::from_slice(bytes).map_err(|_| ContactError::InvalidIdentity)?;
 
@@ -401,6 +410,15 @@ mod tests {
         value["version"] = serde_json::json!(2);
         assert_eq!(
             import_public_identity(&serde_json::to_vec(&value).unwrap()),
+            Err(ContactError::InvalidIdentity)
+        );
+    }
+
+    #[test]
+    fn identity_import_rejects_oversized_documents() {
+        let oversized = vec![b' '; MAX_IDENTITY_DOCUMENT_BYTES + 1];
+        assert_eq!(
+            import_public_identity(&oversized),
             Err(ContactError::InvalidIdentity)
         );
     }

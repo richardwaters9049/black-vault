@@ -33,6 +33,11 @@ fn main() {
             "delete_vault_file",
             "decrypt_vault_file",
             "export_vault_file",
+            "get_public_identity",
+            "list_contacts",
+            "import_contact_identity",
+            "verify_contact_fingerprint",
+            "revoke_contact",
         ])),
     )
     .expect("Unable to build the desktop command permissions");

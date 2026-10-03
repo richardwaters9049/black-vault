@@ -188,7 +188,15 @@ mod tests {
             .manage(crate::vault::VaultStore::new(
                 temporary.path().join("vaults"),
             ))
-            .invoke_handler(tauri::generate_handler![get_desktop_info, list_vaults])
+            .manage(
+                crate::contact_commands::ContactState::load(temporary.path().join("contacts"))
+                    .unwrap(),
+            )
+            .invoke_handler(tauri::generate_handler![
+                get_desktop_info,
+                list_vaults,
+                crate::contact_commands::list_contacts
+            ])
             .build(context)
             .unwrap();
         #[cfg(windows)]
@@ -206,7 +214,7 @@ mod tests {
                     .build()
                     .unwrap()
             });
-            for command in ["get_desktop_info", "list_vaults"] {
+            for command in ["get_desktop_info", "list_vaults", "list_contacts"] {
                 let result = tauri::test::get_ipc_response(
                     &window,
                     tauri::webview::InvokeRequest {

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, File, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole, KeyRound, FilePlus2, Lock, LockOpen } from 'lucide-react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Check, ChevronDown, ContactRound, File, FileLock2, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole, KeyRound, FilePlus2, Lock, LockOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import VaultWorkspace from '@/components/VaultWorkspace';
 import VaultFiles from '@/components/VaultFiles';
@@ -8,9 +8,11 @@ import ExampleFiles from '@/components/ExampleFiles';
 import AuthGate from '@/components/AuthGate';
 import SplashScreen from '@/components/SplashScreen';
 import VaultMark from '@/components/VaultMark';
+import DashboardOverview from '@/components/DashboardOverview';
 import { DEFAULT_IDLE_MS, hasSessionExpired } from '@/lib/sessionTimeout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { errorMessage, native, type DesktopInfo, type VaultSummary, type VaultFile, type NestedVaultSummary } from '@/lib/native';
+
+const TrustedContacts = lazy(() => import('@/components/TrustedContacts'));
 
 export default function App() {
   const [info, setInfo] = useState<DesktopInfo | null>(null);
@@ -40,7 +42,7 @@ export default function App() {
   }
   const [booting, setBooting] = useState(true);
   const [examplesOpen, setExamplesOpen] = useState(false);
-  const [page, setPage] = useState<'overview' | 'vault' | 'create' | 'nested'>('overview');
+  const [page, setPage] = useState<'overview' | 'encrypt' | 'decrypt' | 'vault' | 'create' | 'nested' | 'contacts'>('overview');
   const [storedFiles, setStoredFiles] = useState<VaultFile[]>([]);
   const [decryptedFiles, setDecryptedFiles] = useState<VaultFile[]>([]);
   const [nestedVaults, setNestedVaults] = useState<NestedVaultSummary[]>([]);
@@ -80,7 +82,12 @@ export default function App() {
   useEffect(() => {
     if (!session) { setNestedVaults([]); setSelectedNested(null); setNestedContents([]); setNestedPassword(''); setNestedUnlocked(false); setNestedFileContent(''); return; }
     let active = true;
-    native.listNestedVaults().then(items => { if (active) setNestedVaults(items); })
+    Promise.all([native.listNestedVaults(), native.listVaultFiles()])
+      .then(([nested, files]) => {
+        if (!active) return;
+        setNestedVaults(nested);
+        setStoredFiles(files);
+      })
       .catch(reason => { if (active) setNestedError(errorMessage(reason)); });
     return () => { active = false; };
   }, [session]);
@@ -244,6 +251,14 @@ export default function App() {
         className={"mt-7 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'overview' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
         <LayoutDashboard size={16} /> Overview
       </button>
+      <button type="button" onClick={() => { closeNested(); setPage('encrypt'); }} aria-current={page === 'encrypt' ? 'page' : undefined}
+        className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'encrypt' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
+        <FileLock2 size={16} /> Encryption
+      </button>
+      <button type="button" onClick={() => { closeNested(); setPage('decrypt'); }} aria-current={page === 'decrypt' ? 'page' : undefined}
+        className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'decrypt' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
+        <LockOpen size={16} /> Decryption
+      </button>
       <button type="button" onClick={() => { closeNested(); setPage('vault'); }} aria-current={page === 'vault' ? 'page' : undefined}
         className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'vault' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
         <KeyRound size={16} /> My Vault
@@ -251,6 +266,10 @@ export default function App() {
       <button type="button" onClick={() => { closeNested(); setPage('create'); }} aria-current={page === 'create' ? 'page' : undefined}
         className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'create' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
         <FilePlus2 size={16} /> Create Files
+      </button>
+      <button type="button" onClick={() => { closeNested(); setPage('contacts'); }} aria-current={page === 'contacts' ? 'page' : undefined}
+        className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'contacts' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
+        <ContactRound size={16} /> Trusted Contacts
       </button>
       <button type="button" aria-controls="example-files-panel" aria-expanded={examplesOpen}
         onClick={() => setExamplesOpen(value => !value)}
@@ -262,8 +281,8 @@ export default function App() {
         className={"grid transition-[grid-template-rows,opacity,transform] duration-300 ease-out motion-reduce:transition-none " + (examplesOpen ? "grid-rows-[1fr] translate-y-0 opacity-100" : "pointer-events-none grid-rows-[0fr] -translate-y-1 opacity-0")}>
         <div className="min-h-0 overflow-hidden">
           <ExampleFiles decryptFiles={storedFiles}
-            onSelect={id => { setPage('overview'); setChosenExample(current => ({ id, nonce: (current?.nonce ?? 0) + 1 })); }}
-            onDecryptSelect={id => { setPage('overview'); setChosenDecrypt(current => ({ id, nonce: (current?.nonce ?? 0) + 1 })); }} />
+            onSelect={id => { setPage('encrypt'); setChosenExample(current => ({ id, nonce: (current?.nonce ?? 0) + 1 })); }}
+            onDecryptSelect={id => { setPage('decrypt'); setChosenDecrypt(current => ({ id, nonce: (current?.nonce ?? 0) + 1 })); }} />
         </div>
       </div>
       <section aria-label="Locked Vaults" className="mt-5 border-t border-border pt-4">
@@ -282,35 +301,26 @@ export default function App() {
 
     <main className="mx-auto w-full max-w-6xl px-6 py-8 sm:px-10 sm:py-10">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-6">
-        <div className="flex items-center gap-2 text-xs text-slate-400"><HardDrive size={14} /> Personal workspace <span className="mx-1 text-slate-700">/</span><span className="text-slate-200">{page === 'overview' ? 'Overview' : page === 'vault' ? 'My Vault' : page === 'nested' ? 'Nested Vault' : 'Create Files'}</span></div>
+        <div className="flex items-center gap-2 text-xs text-slate-400"><HardDrive size={14} /> Personal workspace <span className="mx-1 text-slate-700">/</span><span className="text-slate-200">{page === 'overview' ? 'Overview' : page === 'encrypt' ? 'Encryption' : page === 'decrypt' ? 'Decryption' : page === 'vault' ? 'My Vault' : page === 'nested' ? 'Nested Vault' : page === 'contacts' ? 'Trusted Contacts' : 'Create Files'}</span></div>
         <Button variant="outline" disabled={busy} onClick={() => void signOut()}><LockKeyhole size={14} />{busy ? 'Signing out…' : 'Sign out'}</Button>
       </header>
 
-      <div className={page === 'overview' ? 'bv-page-enter' : 'hidden'} aria-hidden={page !== 'overview'} inert={page !== 'overview'}>
-      <section className="pt-6 pb-4">
-        <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">Your private workspace</p>
-        <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Encrypt and decrypt your files.</h1>
-        <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Open Example Files on the left. Click a sample to select it, or drag it into the workspace below.</p>
-      </section>
+      {page === 'overview' && <DashboardOverview currentVault={session} files={storedFiles} />}
 
-      <section className="rounded-xl border border-border bg-card px-5 pb-6 pt-1 sm:px-7"><VaultFiles key={nestedVaults.length} vaultId={session.id} chosenExample={chosenExample} chosenDecrypt={chosenDecrypt} onFilesChange={setStoredFiles} onDecryptedChange={setDecryptedFiles} /></section>
+      {page === 'encrypt' && <div className="bv-page-enter pt-6">
+        <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">Protect local files</p>
+        <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Encryption</h1>
+        <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Choose or drop one file. Black Vault scans it with the local policy gate, encrypts it natively and stores only the encrypted vault copy.</p>
+        <section className="mt-6 rounded-xl border border-border bg-card p-5 sm:p-7"><VaultFiles operation="encrypt" key={'encrypt-' + nestedVaults.length} vaultId={session.id} chosenExample={chosenExample} onFilesChange={setStoredFiles} /></section>
+      </div>}
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        <Card className="gap-3 rounded-xl border border-border ring-0">
-          <CardHeader><CardTitle className="flex items-center gap-2 text-xs font-normal text-slate-400"><HardDrive size={14} /> Application</CardTitle></CardHeader>
-          <CardContent><p className="text-lg">{info ? 'Native desktop' : error ? 'Desktop unavailable' : 'Connecting…'}</p><p className="mt-1 text-xs text-slate-500">{info ? 'Running locally on your device' : error ? 'Launch the desktop application' : 'Checking the desktop connection'}</p></CardContent>
-        </Card>
-        <Card className="gap-3 rounded-xl border border-border ring-0">
-          <CardHeader><CardTitle className="flex items-center gap-2 text-xs font-normal text-slate-400"><LockKeyhole size={14} /> Local vault</CardTitle></CardHeader>
-          <CardContent><p className="text-lg">Offline vaults</p><p className="mt-1 text-xs text-slate-500">Create and manage vaults below</p></CardContent>
-        </Card>
-        <Card className="gap-3 rounded-xl border border-border ring-0">
-          <CardHeader><CardTitle className="flex items-center gap-2 text-xs font-normal text-slate-400"><File size={14} /> Current selection</CardTitle></CardHeader>
-          <CardContent><p className="text-lg">'Encrypted locally'</p><p className="mt-1 text-xs text-slate-500">'Manage files using the workspace above'</p></CardContent>
-        </Card>
-      </div>
-
-      </div>
+      {page === 'decrypt' && <div className="bv-page-enter pt-6">
+        <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">Verify protected files</p>
+        <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Decryption</h1>
+        <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Select an encrypted vault file. Authentication and decryption happen in native memory; the encrypted original remains in the vault.</p>
+        <section className="mt-6 rounded-xl border border-border bg-card p-5 sm:p-7"><VaultFiles operation="decrypt" key={'decrypt-' + nestedVaults.length} vaultId={session.id} chosenDecrypt={chosenDecrypt} onFilesChange={setStoredFiles} onDecryptedChange={setDecryptedFiles} /></section>
+      </div>}
+      {page === 'contacts' && <Suspense fallback={<div className="pt-8 text-xs text-slate-500">Loading trusted contacts…</div>}><TrustedContacts /></Suspense>}
       {page === 'create' && <div className="bv-page-enter pt-6">
         <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">In-vault documents</p>
         <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Create Files</h1>

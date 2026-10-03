@@ -39,6 +39,7 @@ beforeEach(async () => {
     }
     if (command === 'select_file') return null;
     if (command === 'list_vault_files') return [];
+    if (command === 'list_contacts') return [];
     throw new Error('Unexpected command: ' + command);
   });
   host = document.createElement('div');
@@ -82,11 +83,13 @@ it('creates a vault, enters the dashboard and locks it on sign-out', async () =>
   await input('Vault name', 'Personal');
   await input('Vault password', 'correct horse battery staple');
   await submit();
-  expect(host.textContent).toContain('Encrypt and decrypt your files.');
+  expect(host.textContent).toContain('A local snapshot of your vault and trusted-contact state.');
+  expect(host.textContent).toContain('Encryption');
+  expect(host.textContent).toContain('Decryption');
   await click('Sign out');
   expect(locks).toBe(2);
   expect(host.textContent).toContain('Unlock your workspace');
-  expect(host.textContent).not.toContain('Encrypt and decrypt your files.');
+  expect(host.textContent).not.toContain('A local snapshot of your vault and trusted-contact state.');
 });
 
 it('rejects an incorrect password without revealing the dashboard', async () => {

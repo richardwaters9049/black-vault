@@ -11,8 +11,9 @@ const VAULT_FILE_DRAG_TYPE = 'application/x-black-vault-encrypted-file';
 type Mode = 'encrypt' | 'decrypt';
 type Phase = 'idle' | 'working' | 'success' | 'error';
 
-export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFilesChange, onDecryptedChange }: {
+export default function VaultFiles({ vaultId, operation, chosenExample, chosenDecrypt, onFilesChange, onDecryptedChange }: {
   vaultId: string;
+  operation?: Mode;
   chosenExample?: { id: string; nonce: number } | null;
   chosenDecrypt?: { id: string; nonce: number } | null;
   onFilesChange?: (files: VaultFile[]) => void;
@@ -20,7 +21,8 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
 }) {
   const [files, setFiles] = useState<VaultFile[]>([]);
   const [decryptedFiles, setDecryptedFiles] = useState<VaultFile[]>([]);
-  const [mode, setMode] = useState<Mode>('encrypt');
+  const [mode, setMode] = useState<Mode>(operation ?? 'encrypt');
+  const fixedMode = operation !== undefined;
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
   const [selection, setSelection] = useState<{ mode: Mode; id: string; name: string } | null>(null);
@@ -29,7 +31,7 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
   const [status, setStatus] = useState('');
   useEffect(() => {
     let mounted = true;
-    setFiles([]); setDecryptedFiles([]); onDecryptedChange?.([]); setPhase('idle'); setStatus(''); setMode('encrypt'); setSelection(null);
+    setFiles([]); setDecryptedFiles([]); onDecryptedChange?.([]); setPhase('idle'); setStatus(''); setMode(operation ?? 'encrypt'); setSelection(null);
     native.listVaultFiles().then(items => { if (mounted) { setFiles(items); onFilesChange?.(items); } })
       .catch(reason => { if (mounted) { setPhase('error'); setStatus(errorMessage(reason)); } });
     return () => { mounted = false; };
@@ -215,14 +217,14 @@ export default function VaultFiles({ vaultId, chosenExample, chosenDecrypt, onFi
     else decryptFile(selection.id);
     setSelection(null);
   }
-  return <section aria-label="File encryption and decryption" className="mt-7 border-t border-border pt-5">
-    <div role="tablist" aria-label="File operations" className="grid grid-cols-2 gap-2 rounded-xl border border-blue-400/10 bg-[#080f1a] p-1.5">
+  return <section aria-label={mode === 'encrypt' ? 'File encryption' : 'File decryption'} className={fixedMode ? '' : 'mt-7 border-t border-border pt-5'}>
+    {!fixedMode && <div role="tablist" aria-label="File operations" className="grid grid-cols-2 gap-2 rounded-xl border border-blue-400/10 bg-[#080f1a] p-1.5">
       {(['encrypt', 'decrypt'] as const).map(tab => <button key={tab} type="button" role="tab" aria-selected={mode === tab} disabled={busy} onClick={() => changeMode(tab)}
         className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-xs transition-colors ${mode === tab ? 'border border-blue-400/20 bg-blue-500/15 text-sky-200' : 'text-slate-400 hover:text-white'}`}>
         {tab === 'encrypt' ? <FileLock2 size={15} /> : <LockKeyhole size={15} />}{tab === 'encrypt' ? 'Encryption' : 'Decryption'}
       </button>)}
-    </div>
-    <div role="tabpanel" className="mt-4">
+    </div>}
+    <div role={fixedMode ? undefined : 'tabpanel'} className={fixedMode ? '' : 'mt-4'}>
       <div ref={dropZone} onDragOver={dragOver} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(false); }} onDrop={drop}
         className={`relative rounded-xl border border-dashed p-5 text-center transition-all duration-200 sm:p-7 ${over ? 'scale-[1.01] border-sky-300 bg-blue-500/15 shadow-[0_0_35px_#3b82f620]' : 'border-blue-400/25 bg-[#0b1422]'}`}>
         <div className={`mx-auto grid size-12 place-items-center rounded-xl border border-blue-400/20 bg-blue-400/10 text-blue-300 ${phase === 'working' ? 'bv-operation-working' : ''}`}>

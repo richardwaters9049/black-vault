@@ -9,6 +9,7 @@ macro_rules! debug_trace {
 }
 
 mod commands;
+mod contact_commands;
 mod contacts;
 mod file_crypto;
 mod identity_store;
@@ -79,8 +80,11 @@ pub fn run() {
         })
         .setup(|app| {
             use tauri::Manager;
-            let root = app.path().app_local_data_dir()?.join("vaults");
-            app.manage(vault::VaultStore::new(root));
+            let app_data = app.path().app_local_data_dir()?;
+            app.manage(vault::VaultStore::new(app_data.join("vaults")));
+            let contacts = contact_commands::ContactState::load(app_data.join("contacts"))
+                .map_err(|_| std::io::Error::other("Unable to load contact security state"))?;
+            app.manage(contacts);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -109,7 +113,12 @@ pub fn run() {
             commands::update_vault_text_file,
             commands::delete_vault_file,
             commands::decrypt_vault_file,
-            commands::export_vault_file
+            commands::export_vault_file,
+            contact_commands::get_public_identity,
+            contact_commands::list_contacts,
+            contact_commands::import_contact_identity,
+            contact_commands::verify_contact_fingerprint,
+            contact_commands::revoke_contact
         ])
         .run(context())
         .expect("Unable to launch Black Vault");

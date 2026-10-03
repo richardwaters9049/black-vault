@@ -32,6 +32,11 @@
     "allow-delete-vault-file",
     "allow-decrypt-vault-file",
     "allow-export-vault-file",
+    "allow-get-public-identity",
+    "allow-list-contacts",
+    "allow-import-contact-identity",
+    "allow-verify-contact-fingerprint",
+    "allow-revoke-contact",
     "core:event:allow-listen",
     "core:event:allow-unlisten"
   ]

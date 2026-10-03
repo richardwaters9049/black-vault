@@ -19,6 +19,17 @@ export interface VaultSummary {
 export interface NestedVaultSummary { id: string; fileCount: number }
 export interface VaultFile { id: string; name: string; sizeBytes: number }
 export interface NativeError { code: string; message: string }
+export type ContactTrustState = 'unverified' | 'verified' | 'key_changed' | 'revoked';
+export interface PublicIdentity {
+  fingerprint: string;
+  document: string;
+}
+export interface TrustedContact {
+  name: string;
+  fingerprint: string;
+  trust: ContactTrustState;
+  previousVerifiedFingerprint: string | null;
+}
 
 interface Commands {
   get_desktop_info: DesktopInfo;
@@ -47,6 +58,11 @@ interface Commands {
   delete_vault_file: void;
   decrypt_vault_file: VaultFile;
   export_vault_file: VaultFile | null;
+  get_public_identity: PublicIdentity;
+  list_contacts: TrustedContact[];
+  import_contact_identity: TrustedContact;
+  verify_contact_fingerprint: TrustedContact;
+  revoke_contact: TrustedContact;
 }
 
 function call<K extends keyof Commands>(command: K, args?: Record<string, unknown>): Promise<Commands[K]> {
@@ -80,6 +96,11 @@ export const native = {
   deleteVaultFile: (fileId: string) => call('delete_vault_file', { fileId }),
   decryptVaultFile: (fileId: string) => call('decrypt_vault_file', { fileId }),
   exportVaultFile: (fileId: string) => call('export_vault_file', { fileId }),
+  getPublicIdentity: () => call('get_public_identity'),
+  listContacts: () => call('list_contacts'),
+  importContactIdentity: (name: string, document: string) => call('import_contact_identity', { name, document }),
+  verifyContactFingerprint: (name: string, fingerprint: string) => call('verify_contact_fingerprint', { name, fingerprint }),
+  revokeContact: (name: string) => call('revoke_contact', { name }),
 };
 
 export function errorMessage(error: unknown): string {

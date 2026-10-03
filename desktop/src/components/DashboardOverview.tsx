@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ContactRound, FileLock2, KeyRound, Lock, LockOpen, ShieldCheck, ShieldQuestion } from 'lucide-react';
 import { errorMessage, native, type TrustedContact, type VaultFile, type VaultSummary } from '@/lib/native';
 
-export default function DashboardOverview({ currentVault, files }: { currentVault: VaultSummary; files: VaultFile[] }) {
+export default function DashboardOverview({ currentVault, files }: { currentVault: VaultSummary | null; files: VaultFile[] }) {
   const [vaults, setVaults] = useState<VaultSummary[]>([]);
   const [contacts, setContacts] = useState<TrustedContact[]>([]);
   const [error, setError] = useState('');
@@ -17,7 +17,7 @@ export default function DashboardOverview({ currentVault, files }: { currentVaul
       })
       .catch(reason => { if (active) setError(errorMessage(reason)); });
     return () => { active = false; };
-  }, [currentVault.id]);
+  }, [currentVault?.id]);
 
   const verified = contacts.filter(contact => contact.trust === 'verified').length;
   const changed = contacts.filter(contact => contact.trust === 'key_changed').length;
@@ -39,8 +39,8 @@ export default function DashboardOverview({ currentVault, files }: { currentVaul
       </div>
       <div className="rounded-xl border border-border bg-card p-5">
         <FileLock2 size={17} className="text-sky-300"/>
-        <p className="mt-4 text-2xl font-medium">{files.length}</p>
-        <p className="mt-1 text-[11px] text-slate-500">Encrypted file{files.length === 1 ? '' : 's'} in current vault</p>
+        <p className="mt-4 text-2xl font-medium">{currentVault ? files.length : '—'}</p>
+        <p className="mt-1 text-[11px] text-slate-500">{currentVault ? `Encrypted file${files.length === 1 ? '' : 's'} in authenticated vault` : 'Vault contents hidden while locked'}</p>
       </div>
       <div className="rounded-xl border border-border bg-card p-5">
         <ShieldCheck size={17} className="text-emerald-300"/>

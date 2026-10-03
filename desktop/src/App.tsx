@@ -1,11 +1,11 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ContactRound, File, FileLock2, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole, KeyRound, FilePlus2, Lock, LockOpen } from 'lucide-react';
+import { Check, ChevronDown, ContactRound, File, FileLock2, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole, FilePlus2, Lock, LockOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import VaultWorkspace from '@/components/VaultWorkspace';
 import VaultFiles from '@/components/VaultFiles';
 import VaultFileEditor from '@/components/VaultFileEditor';
 import ExampleFiles from '@/components/ExampleFiles';
-import AuthGate from '@/components/AuthGate';
+import VaultAccess from '@/components/VaultAccess';
 import SplashScreen from '@/components/SplashScreen';
 import VaultMark from '@/components/VaultMark';
 import DashboardOverview from '@/components/DashboardOverview';
@@ -17,32 +17,25 @@ const TrustedContacts = lazy(() => import('@/components/TrustedContacts'));
 export default function App() {
   const [info, setInfo] = useState<DesktopInfo | null>(null);
   const [session, setSession] = useState<VaultSummary | null>(null);
-  const [authExiting, setAuthExiting] = useState(false);
   const [dashboardEntering, setDashboardEntering] = useState(false);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (transitionTimer.current) clearTimeout(transitionTimer.current); }, []);
 
   function enterDashboard(vault: VaultSummary) {
-    // Called only after native authentication succeeds. Keep the authenticated
-    // session in memory and never display the dashboard on an auth failure.
+    // Native authentication is the only transition that creates an open vault session.
     if (transitionTimer.current) clearTimeout(transitionTimer.current);
-    if (!window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setSession(vault); return;
-    }
-    setAuthExiting(true);
+    setSession(vault);
+    setPage('decrypt');
+    if (!window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    setDashboardEntering(true);
     transitionTimer.current = setTimeout(() => {
-      setSession(vault);
-      setAuthExiting(false);
-      setDashboardEntering(true);
-      transitionTimer.current = setTimeout(() => {
-        setDashboardEntering(false);
-        transitionTimer.current = null;
-      }, 800);
-    }, 600);
+      setDashboardEntering(false);
+      transitionTimer.current = null;
+    }, 800);
   }
   const [booting, setBooting] = useState(true);
   const [examplesOpen, setExamplesOpen] = useState(false);
-  const [page, setPage] = useState<'overview' | 'encrypt' | 'decrypt' | 'vault' | 'create' | 'nested' | 'contacts'>('overview');
+  const [page, setPage] = useState<'overview' | 'encrypt' | 'decrypt' | 'nested' | 'contacts'>('overview');
   const [storedFiles, setStoredFiles] = useState<VaultFile[]>([]);
   const [decryptedFiles, setDecryptedFiles] = useState<VaultFile[]>([]);
   const [nestedVaults, setNestedVaults] = useState<NestedVaultSummary[]>([]);
@@ -237,9 +230,6 @@ export default function App() {
 
   if (booting) return <SplashScreen />;
   if (!info) return <main className="grid place-items-center p-10"><p role="alert" className="text-sm text-red-300">{error || 'Native desktop unavailable.'}</p></main>;
-  if (!session) return <div className={authExiting ? 'bv-auth-exit' : undefined}>
-    <AuthGate onAuthenticated={enterDashboard} />
-  </div>;
 
   return <div className={'bv-dashboard-shell grid grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)]' + (dashboardEntering ? ' bv-dashboard-enter' : '')}>
     <aside className="flex flex-col border-b border-border bg-[#0b1018] p-5 md:border-r md:border-b-0">
@@ -258,14 +248,6 @@ export default function App() {
       <button type="button" onClick={() => { closeNested(); setPage('decrypt'); }} aria-current={page === 'decrypt' ? 'page' : undefined}
         className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'decrypt' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
         <LockOpen size={16} /> Decryption
-      </button>
-      <button type="button" onClick={() => { closeNested(); setPage('vault'); }} aria-current={page === 'vault' ? 'page' : undefined}
-        className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'vault' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
-        <KeyRound size={16} /> My Vault
-      </button>
-      <button type="button" onClick={() => { closeNested(); setPage('create'); }} aria-current={page === 'create' ? 'page' : undefined}
-        className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'create' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
-        <FilePlus2 size={16} /> Create Files
       </button>
       <button type="button" onClick={() => { closeNested(); setPage('contacts'); }} aria-current={page === 'contacts' ? 'page' : undefined}
         className={"mt-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors " + (page === 'contacts' ? 'border-blue-400/10 bg-blue-500/10 text-blue-300' : 'border-transparent text-slate-400 hover:text-blue-300')}>
@@ -301,8 +283,8 @@ export default function App() {
 
     <main className="mx-auto w-full max-w-6xl px-6 py-8 sm:px-10 sm:py-10">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-6">
-        <div className="flex items-center gap-2 text-xs text-slate-400"><HardDrive size={14} /> Personal workspace <span className="mx-1 text-slate-700">/</span><span className="text-slate-200">{page === 'overview' ? 'Overview' : page === 'encrypt' ? 'Encryption' : page === 'decrypt' ? 'Decryption' : page === 'vault' ? 'My Vault' : page === 'nested' ? 'Nested Vault' : page === 'contacts' ? 'Trusted Contacts' : 'Create Files'}</span></div>
-        <Button variant="outline" disabled={busy} onClick={() => void signOut()}><LockKeyhole size={14} />{busy ? 'Signing out…' : 'Sign out'}</Button>
+        <div className="flex items-center gap-2 text-xs text-slate-400"><HardDrive size={14} /> Personal workspace <span className="mx-1 text-slate-700">/</span><span className="text-slate-200">{page === 'overview' ? 'Overview' : page === 'encrypt' ? 'Encryption' : page === 'decrypt' ? 'Decryption' : page === 'nested' ? 'Nested Vault' : 'Trusted Contacts'}</span></div>
+        {session && <Button variant="outline" disabled={busy} onClick={() => void signOut()}><LockKeyhole size={14} />{busy ? 'Locking…' : 'Lock vault'}</Button>}
       </header>
 
       {page === 'overview' && <DashboardOverview currentVault={session} files={storedFiles} />}
@@ -311,28 +293,32 @@ export default function App() {
         <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">Protect local files</p>
         <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Encryption</h1>
         <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Choose or drop one file. Black Vault scans it with the local policy gate, encrypts it natively and stores only the encrypted vault copy.</p>
-        <section className="mt-6 rounded-xl border border-border bg-card p-5 sm:p-7"><VaultFiles operation="encrypt" key={'encrypt-' + nestedVaults.length} vaultId={session.id} chosenExample={chosenExample} onFilesChange={setStoredFiles} /></section>
+        {session
+          ? <section className="mt-6 rounded-xl border border-border bg-card p-5 sm:p-7"><VaultFiles operation="encrypt" key={'encrypt-' + nestedVaults.length} vaultId={session.id} chosenExample={chosenExample} onFilesChange={setStoredFiles} /></section>
+          : <VaultAccess onAuthenticated={enterDashboard} />}
       </div>}
 
       {page === 'decrypt' && <div className="bv-page-enter pt-6">
         <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">Verify protected files</p>
         <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Decryption</h1>
         <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Select an encrypted vault file. Authentication and decryption happen in native memory; the encrypted original remains in the vault.</p>
-        <section className="mt-6 rounded-xl border border-border bg-card p-5 sm:p-7"><VaultFiles operation="decrypt" key={'decrypt-' + nestedVaults.length} vaultId={session.id} chosenDecrypt={chosenDecrypt} onFilesChange={setStoredFiles} onDecryptedChange={setDecryptedFiles} /></section>
+        {session
+          ? <section className="mt-6 rounded-xl border border-border bg-card p-5 sm:p-7"><VaultFiles operation="decrypt" key={'decrypt-' + nestedVaults.length} vaultId={session.id} chosenDecrypt={chosenDecrypt} onFilesChange={setStoredFiles} onDecryptedChange={setDecryptedFiles} /></section>
+          : <VaultAccess onAuthenticated={enterDashboard} />}
       </div>}
       {page === 'contacts' && <Suspense fallback={<div className="pt-8 text-xs text-slate-500">Loading trusted contacts…</div>}><TrustedContacts /></Suspense>}
-      {page === 'create' && <div className="bv-page-enter pt-6">
-        <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">In-vault documents</p>
-        <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Create Files</h1>
-        <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Write a document and encrypt it directly into your unlocked vault. No external Save dialog or plaintext file is created.</p>
+      {page === 'decrypt' && session && <section className="bv-premium-enter mt-6 border-t border-border pt-6">
+        <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-sky-400">Authenticated vault workspace</p>
+        <h2 className="text-lg font-medium">Open, examine and edit protected documents</h2>
+        <p className="mt-2 max-w-2xl text-xs leading-6 text-slate-400">Supported text documents are decrypted only into the active session editor. Saving re-encrypts the document into the vault; no plaintext working copy is written to disk.</p>
         <VaultFileEditor key={nestedVaults.length} vaultId={session.id} onFilesChange={setStoredFiles}/>
-      </div>}
-      {page === 'nested' && selectedNested && <section key={selectedNested} className="bv-page-enter pt-6">
+      </section>}
+      {page === 'nested' && session && selectedNested && <section key={selectedNested} className="bv-page-enter pt-6">
         <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-sky-400">Compartmentalised workspace</p>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><h1 className="flex items-center gap-3 text-2xl font-medium tracking-tight sm:text-3xl"><LockKeyhole className="text-sky-300"/> Vault {selectedNested.slice(0, 8)}</h1>
           <p className="mt-2 text-xs text-slate-400">Encrypted within the parent vault · {nestedUnlocked ? 'Authenticated for this view' : 'PIN required'}</p></div>
-          <Button variant="outline" onClick={() => { closeNested(); setPage('vault'); }}><Lock size={14}/> {nestedUnlocked ? 'Lock nested vault' : 'Back to parent'}</Button>
+          <Button variant="outline" onClick={() => { closeNested(); setPage('decrypt'); }}><Lock size={14}/> {nestedUnlocked ? 'Lock nested vault' : 'Back to parent'}</Button>
         </div>
         {!nestedUnlocked ? <form onSubmit={event => void unlockNested(event)} className="bv-premium-enter mt-7 max-w-md space-y-4 rounded-xl border border-border bg-card p-6">
           <p className="text-sm font-medium">Unlock this compartment</p>
@@ -394,10 +380,10 @@ export default function App() {
         </div>}
         {nestedError && <p role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/5 p-3 text-xs text-red-300">{nestedError}</p>}
       </section>}
-      {page === 'vault' && <div className="bv-page-enter pt-6">
-        <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">Local security</p>
-        <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">My Vault</h1>
-        <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Your encrypted vault, local files, session state and security controls. No cloud connection is required.</p>
+      {page === 'decrypt' && session && <div className="bv-premium-enter mt-6 border-t border-border pt-6">
+        <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400">Vault security controls</p>
+        <h2 className="text-lg font-medium">Authenticated session</h2>
+        <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Manage the currently authenticated vault and its protected compartments. Locking the vault immediately removes access to these controls and protected contents.</p>
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-border bg-card p-5"><p className="text-xs text-slate-400">Current vault</p><p className="mt-2 break-all text-sm font-medium">{session.name ?? 'Unlocked vault'}</p></div>
           <div className="rounded-xl border border-border bg-card p-5"><p className="text-xs text-slate-400">Encrypted files</p><p className="mt-2 text-xl font-medium">{storedFiles.length}</p></div>
@@ -430,7 +416,7 @@ export default function App() {
             <Button type="submit" disabled={nestedBusy || lockIds.length === 0 || !lockName.trim() || !/^[0-9]{4}$/.test(lockPassword)}><Lock size={14}/>{nestedBusy ? 'Securing files…' : 'Lock selected files'}</Button>
           </form>
         </section>
-        {selectedNested && page === 'vault' && <section className="bv-premium-enter mt-6 rounded-xl border border-border bg-card p-5 transition-[border-color,box-shadow] duration-300 hover:border-sky-500/20 hover:shadow-[0_12px_40px_#00000018]">
+        {selectedNested && page === 'decrypt' && <section className="bv-premium-enter mt-6 rounded-xl border border-border bg-card p-5 transition-[border-color,box-shadow] duration-300 hover:border-sky-500/20 hover:shadow-[0_12px_40px_#00000018]">
           <h2 className="flex items-center gap-2 text-sm font-medium"><LockOpen size={15} className="text-sky-300"/> Nested vault {selectedNested.slice(0, 8)}</h2>
           <p className="mt-2 text-xs text-slate-400">Enter your four-digit PIN to inspect the protected file list, or restore its encrypted files to the parent vault. Restoration removes the nested container only after all encrypted files are saved.</p>
           <form onSubmit={event => void unlockNested(event)} className="mt-4 flex flex-wrap gap-3">

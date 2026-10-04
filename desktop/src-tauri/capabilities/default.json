@@ -6,6 +6,8 @@
     "main"
   ],
   "permissions": [
+    "allow-get-biometric-status",
+    "allow-authenticate-biometric",
     "allow-get-desktop-info",
     "allow-select-file",
     "allow-list-vaults",

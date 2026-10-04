@@ -13,6 +13,9 @@ let host: HTMLDivElement;
 let vaults: VaultSummary[];
 let locks: number;
 let invalidPassword: boolean;
+let vaultFileReads: number;
+let biometricAttempts: number;
+let deletedVaults: number;
 
 beforeEach(async () => {
   vi.useFakeTimers();
@@ -20,8 +23,14 @@ beforeEach(async () => {
   vaults = [];
   locks = 0;
   invalidPassword = false;
+  vaultFileReads = 0;
+  biometricAttempts = 0;
+  deletedVaults = 0;
   mockIPC((command, args) => {
     if (command === 'get_desktop_info') return { appName: 'Black Vault', version: '0.1.0', platform: 'macos', architecture: 'aarch64' };
+    if (command === 'get_biometric_status') return { available: true, kind: 'touch_id', platform: 'macos' };
+    if (command === 'authenticate_biometric') { biometricAttempts += 1; return { authenticated: true }; }
+    if (command === 'delete_locked_vault') { deletedVaults += 1; vaults = vaults.filter(vault => vault.id !== String((args as { vaultId: string }).vaultId)); return null; }
     if (command === 'lock_vault') {
       locks += 1;
       vaults = vaults.map(vault => ({ ...vault, isLocked: true, name: null }));
@@ -38,7 +47,7 @@ beforeEach(async () => {
       vaults = [vault]; return vault;
     }
     if (command === 'select_file') return null;
-    if (command === 'list_vault_files') return [];
+    if (command === 'list_vault_files') { vaultFileReads += 1; return [{ id: 'secret-file', name: 'private-plan.txt', sizeBytes: 128 }]; }
     if (command === 'list_contacts') return [];
     throw new Error('Unexpected command: ' + command);
   });
@@ -74,28 +83,32 @@ it('shows a startup animation, locks previous state and requires first-time setu
   expect(host.querySelector('[aria-label="Initialising Black Vault"]')).not.toBeNull();
   await ready();
   expect(locks).toBe(1);
-  expect(host.textContent).toContain('Create your first vault');
-  expect(host.textContent).not.toContain('Encrypt and decrypt your files.');
+  expect(host.textContent).toContain('Overview');
+  expect(host.textContent).toContain('Vault contents hidden while locked');
+  expect(host.textContent).not.toContain('private-plan.txt');
+  expect(vaultFileReads).toBe(0);
+  expect(host.textContent).not.toContain('Authenticated vault workspace');
 });
 
 it('creates a vault, enters the dashboard and locks it on sign-out', async () => {
   await ready();
+  await click('Decryption');
   await input('Vault name', 'Personal');
   await input('Vault password', 'correct horse battery staple');
   await submit();
-  expect(host.textContent).toContain('A local snapshot of your vault and trusted-contact state.');
-  expect(host.textContent).toContain('Encryption');
-  expect(host.textContent).toContain('Decryption');
-  await click('Sign out');
+  expect(host.textContent).toContain('Authenticated vault workspace');
+  expect(host.textContent).toContain('Open, examine and edit protected documents');
+  await click('Lock vault');
   expect(locks).toBe(2);
-  expect(host.textContent).toContain('Unlock your workspace');
-  expect(host.textContent).not.toContain('A local snapshot of your vault and trusted-contact state.');
+  expect(host.textContent).toContain('Authenticate to open a vault');
+  expect(host.textContent).not.toContain('Authenticated vault workspace');
 });
 
 it('rejects an incorrect password without revealing the dashboard', async () => {
   vaults = [{ id, name: null, isLocked: true }];
   invalidPassword = true;
   await ready();
+  await click('Decryption');
   await input('Vault password', 'incorrect password');
   await submit();
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('Incorrect vault password');
@@ -103,8 +116,26 @@ it('rejects an incorrect password without revealing the dashboard', async () => 
   expect(host.textContent).not.toContain('Encrypt and decrypt your files.');
 });
 
+
+it('requires exact confirmation and fresh Touch ID before deleting a locked vault', async () => {
+  vaults = [{ id, name: null, isLocked: true }];
+  await ready();
+  await click('Decryption');
+  await click('Delete this vault');
+  expect(deletedVaults).toBe(0);
+  expect(biometricAttempts).toBe(0);
+
+  await input('Delete vault confirmation', `DELETE ${id}`);
+  await click('Authenticate & permanently delete');
+
+  expect(biometricAttempts).toBe(1);
+  expect(deletedVaults).toBe(1);
+  expect(host.textContent).toContain('Vault permanently deleted from this device.');
+});
+
 it('shows and hides the creation password without changing its value', async () => {
   await ready();
+  await click('Decryption');
   await input('Vault password', 'a unique disposable test password');
   const password = host.querySelector<HTMLInputElement>('input[aria-label="Vault password"]');
   expect(password?.type).toBe('password');

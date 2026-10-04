@@ -14,12 +14,100 @@
   --font-mono: "SFMono-Regular", Consolas, monospace;
 }
 
-:root { font-family: var(--font-sans); color: var(--color-foreground); background: var(--color-background); color-scheme: dark; }
+:root {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  color: var(--color-foreground);
+  background: var(--color-background);
+  color-scheme: dark;
+}
 * { box-sizing: border-box; }
-body { margin: 0; }
+body {
+  margin: 0;
+  line-height: 1.64;
+  letter-spacing: 0.014em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button, input, select, textarea {
+  letter-spacing: 0.012em;
+  line-height: 1.45;
+}
+.font-mono { letter-spacing: 0.035em; }
+.text-xs { font-size: .82rem !important; line-height: 1.48rem !important; }
+.text-sm { font-size: .95rem !important; line-height: 1.58rem !important; }
+.text-\[10px\] { font-size: .72rem !important; line-height: 1.12rem !important; }
+.text-\[11px\] { font-size: .78rem !important; line-height: 1.24rem !important; }
+.tracking-tight { letter-spacing: -.012em !important; }
+h1, h2, h3, h4 { line-height: 1.22; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 ::selection { background: #274779; }
+
+
+
+/* Final UI/UX sprint: depth, hierarchy and tactile desktop affordances. */
+.bv-dashboard-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 78% 8%, rgba(37, 99, 235, .08), transparent 28%),
+    radial-gradient(circle at 30% 92%, rgba(14, 165, 233, .035), transparent 30%),
+    #090d14;
+}
+.bv-dashboard-shell > aside {
+  background:
+    linear-gradient(180deg, rgba(13, 20, 31, .98), rgba(8, 13, 21, .98));
+  box-shadow: inset -1px 0 rgba(148, 163, 184, .035), 14px 0 38px rgba(0, 0, 0, .16);
+}
+.bg-card {
+  background:
+    linear-gradient(145deg, rgba(17, 25, 38, .98), rgba(11, 17, 27, .98)) !important;
+}
+.rounded-xl.border.bg-card,
+.rounded-2xl.border.bg-card {
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, .025),
+    0 14px 34px rgba(0, 0, 0, .14);
+}
+input,
+select,
+textarea {
+  min-height: 44px;
+  border-color: #26364b !important;
+  background-color: #080d15;
+  transition:
+    border-color .2s ease,
+    box-shadow .2s ease,
+    background-color .2s ease;
+}
+textarea { min-height: 120px; }
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: #354b67 !important;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .10);
+}
+button:not(:disabled):active {
+  filter: brightness(1.06);
+}
+.bv-empty-vault {
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, .035),
+    0 24px 70px rgba(0, 0, 0, .22),
+    0 0 60px rgba(37, 99, 235, .06);
+}
+@media (prefers-reduced-motion: reduce) {
+  input, select, textarea, button {
+    transition: none !important;
+  }
+  button:not(:disabled):active { transform: none; }
+}
 
 /* Black/blue identity: vector vault cube with a drawn-in V and restrained orbital motion. */
 .vault-splash { background: radial-gradient(ellipse at 50% 42%, #102b4b 0%, #081523 31%, #050a11 72%); }
@@ -60,26 +148,14 @@ button:disabled { cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { .bv-operation-working, .bv-operation-progress, .bv-operation-confirm { animation: none !important; } }
 
 
-/* Restrained transitions for vault cards, nested vault entries and completed actions. */
-.bv-premium-enter { animation: bv-premium-enter .42s cubic-bezier(.22,1,.36,1) both; }
-@keyframes bv-premium-enter {
-  from { opacity: 0; transform: translateY(9px) scale(.992); filter: blur(2px); }
-  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .bv-premium-enter { animation: none !important; }
-}
-
-
-.bv-page-enter { animation: bv-page-enter .46s cubic-bezier(.22,1,.36,1) both; }
-@keyframes bv-page-enter {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+/* Page-level motion is owned by Framer Motion in App.tsx. */
+.bv-premium-enter,
+.bv-page-enter {
+  animation: none;
 }
 button:not(:disabled) { transition: background-color .25s ease, border-color .25s ease, color .25s ease, box-shadow .25s ease; }
 button:focus-visible, input:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
-  .bv-page-enter { animation: none !important; }
   button, input { transition: none !important; }
 }
 
@@ -165,6 +241,455 @@ button:focus-visible, input:focus-visible { outline: 2px solid #60a5fa; outline-
 .bv-auth-panel-enter { animation: bv-auth-panel-enter .72s .96s cubic-bezier(.22,1,.36,1) both; }
 @media (prefers-reduced-motion: reduce) { .bv-auth-panel-enter, .bv-globe-enter { animation: none; } }
 
+/* Empty-vault dashboard: reuse the globe as a quiet visual model of local vault creation. */
+.bv-empty-vault {
+  background:
+    radial-gradient(circle at 78% 48%, #1d4ed817, transparent 34%),
+    linear-gradient(135deg, #0e141e, #0a111c);
+}
+.bv-vault-seed {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #60a5fa42;
+  border-radius: 8px;
+  color: #bfdbfe;
+  background: #0a1625d9;
+  box-shadow: 0 0 20px #2563eb3d, inset 0 1px #ffffff0d;
+  backdrop-filter: blur(6px);
+  animation: bv-vault-seed 3.8s ease-in-out infinite;
+}
+.bv-vault-seed-one { left: 9%; top: 31%; animation-delay: -.5s; }
+.bv-vault-seed-two { right: 8%; top: 22%; animation-delay: -1.6s; }
+.bv-vault-seed-three { right: 10%; bottom: 25%; animation-delay: -2.7s; }
+.bv-vault-seed-four { left: 17%; bottom: 17%; animation-delay: -3.3s; }
+@keyframes bv-vault-seed {
+  0%, 100% { opacity: .45; transform: translateY(3px) scale(.92); box-shadow: 0 0 10px #2563eb22; }
+  45% { opacity: 1; transform: translateY(-3px) scale(1); box-shadow: 0 0 24px #3b82f659; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bv-vault-seed { animation: none; opacity: .85; }
+}
+
+
+
+
+
+
+/* Dashboard vault hero: a restrained secure-container visual, not a literal bank safe. */
+.bv-vault-hero {
+  isolation: isolate;
+}
+.bv-vault-ambient {
+  background:
+    radial-gradient(circle at 50% 48%, #3b82f625 0%, #2563eb12 34%, transparent 67%);
+  filter: blur(10px);
+  animation: bv-vault-ambient 4.6s ease-in-out infinite alternate;
+}
+.bv-vault-grid {
+  opacity: .26;
+  background-image:
+    linear-gradient(#60a5fa12 1px, transparent 1px),
+    linear-gradient(90deg, #60a5fa12 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(circle at center, black 24%, transparent 72%);
+}
+.bv-vault-shell {
+  width: 58%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) perspective(900px) rotateX(2deg) rotateY(-5deg);
+  animation: bv-vault-shell-enter .9s cubic-bezier(.22,1,.36,1) both, bv-vault-shell-float 4.8s 1s ease-in-out infinite;
+}
+.bv-vault-backplate {
+  border: 1px solid #60a5fa38;
+  border-radius: 24px;
+  background:
+    linear-gradient(145deg, #182335, #09111d 58%, #050a12);
+  box-shadow:
+    0 28px 70px #0009,
+    0 0 45px #2563eb24,
+    inset 0 1px #ffffff12,
+    inset 0 -18px 32px #0008;
+}
+.bv-vault-backplate::before,
+.bv-vault-backplate::after {
+  content: "";
+  position: absolute;
+  inset: 5%;
+  border: 1px solid #93c5fd17;
+  border-radius: 19px;
+  pointer-events: none;
+}
+.bv-vault-backplate::after {
+  inset: 10%;
+  border-style: dashed;
+  border-color: #60a5fa0f;
+}
+.bv-vault-door {
+  border: 1px solid #7dd3fc47;
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, #121d2c, #07101b 72%);
+  box-shadow:
+    0 0 30px #3b82f61a,
+    inset 0 1px #ffffff12,
+    inset 0 0 30px #000a;
+}
+.bv-vault-door-inset {
+  border: 1px solid #60a5fa1f;
+  border-radius: 13px;
+  box-shadow: inset 0 0 28px #02050a;
+}
+.bv-vault-lock {
+  width: 47%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+}
+.bv-vault-lock-ring {
+  border: 1px solid #7dd3fc5c;
+  border-radius: 50%;
+  box-shadow: 0 0 20px #38bdf82b, inset 0 0 14px #2563eb24;
+  animation: bv-vault-lock-turn 12s linear infinite;
+}
+.bv-vault-lock-ring::before,
+.bv-vault-lock-ring::after {
+  content: "";
+  position: absolute;
+  background: #93c5fd7a;
+  box-shadow: 0 0 8px #60a5fa80;
+}
+.bv-vault-lock-ring::before {
+  left: 50%;
+  top: -2px;
+  width: 1px;
+  height: 7px;
+}
+.bv-vault-lock-ring::after {
+  top: 50%;
+  right: -2px;
+  width: 7px;
+  height: 1px;
+}
+.bv-vault-lock-ring-inner {
+  border-color: #3b82f638;
+  animation-duration: 8s;
+  animation-direction: reverse;
+}
+.bv-vault-lock-core {
+  display: grid;
+  place-items: center;
+  border: 1px solid #7dd3fc42;
+  border-radius: 50%;
+  color: #bfdbfe;
+  background: radial-gradient(circle, #1d4ed82e, #07101c 65%);
+  box-shadow: 0 0 22px #2563eb3d, inset 0 0 14px #60a5fa12;
+  animation: bv-vault-core 2.6s ease-in-out infinite alternate;
+}
+.bv-vault-lock-spoke {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44%;
+  height: 1px;
+  transform-origin: left center;
+  background: linear-gradient(90deg, #93c5fd82, transparent);
+}
+.bv-vault-lock-spoke-a { transform: rotate(0deg); }
+.bv-vault-lock-spoke-b { transform: rotate(120deg); }
+.bv-vault-lock-spoke-c { transform: rotate(240deg); }
+
+.bv-vault-bolt {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid #7dd3fc4a;
+  border-radius: 50%;
+  background: #0b1625;
+  box-shadow: 0 0 8px #3b82f638;
+}
+.bv-vault-bolt-tl { left: 7%; top: 7%; }
+.bv-vault-bolt-tr { right: 7%; top: 7%; }
+.bv-vault-bolt-bl { left: 7%; bottom: 7%; }
+.bv-vault-bolt-br { right: 7%; bottom: 7%; }
+
+.bv-vault-scan {
+  overflow: hidden;
+  border-radius: 18px;
+  pointer-events: none;
+}
+.bv-vault-scan::after {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #7dd3fcbd, transparent);
+  box-shadow: 0 0 15px #38bdf880;
+  animation: bv-vault-scan 3.6s ease-in-out infinite;
+}
+.bv-vault-edge {
+  position: absolute;
+  pointer-events: none;
+}
+.bv-vault-edge-top {
+  left: 12%;
+  right: 12%;
+  top: 7%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #7dd3fc70, transparent);
+}
+.bv-vault-edge-right {
+  top: 14%;
+  bottom: 14%;
+  right: 6%;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, #3b82f65c, transparent);
+}
+
+.bv-vault-orbit {
+  border: 1px solid #60a5fa20;
+  border-radius: 50%;
+  transform: rotate(-17deg);
+  animation: bv-vault-orbit 15s linear infinite;
+}
+.bv-vault-orbit-b {
+  transform: rotate(36deg);
+  border-style: dashed;
+  border-color: #93c5fd17;
+  animation-duration: 21s;
+  animation-direction: reverse;
+}
+.bv-vault-orbit-node {
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #bfdbfe;
+  box-shadow: 0 0 8px 2px #60a5fa75;
+}
+
+.bv-vault-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #60a5fa24;
+  border-radius: 999px;
+  padding: 6px 9px;
+  color: #9cc7ff;
+  background: #07111dcc;
+  box-shadow: 0 8px 25px #0005;
+  font-size: 10px;
+  letter-spacing: .035em;
+  backdrop-filter: blur(8px);
+  animation: bv-vault-status 3.8s ease-in-out infinite alternate;
+}
+.bv-vault-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 8px #34d39990;
+}
+
+@keyframes bv-vault-shell-enter {
+  from { opacity: 0; transform: translate(-50%, -50%) perspective(900px) rotateX(8deg) rotateY(-18deg) scale(.84); }
+  to { opacity: 1; transform: translate(-50%, -50%) perspective(900px) rotateX(2deg) rotateY(-5deg) scale(1); }
+}
+@keyframes bv-vault-shell-float {
+  0%, 100% { transform: translate(-50%, -50%) perspective(900px) rotateX(2deg) rotateY(-5deg) translateY(0); }
+  50% { transform: translate(-50%, -50%) perspective(900px) rotateX(1deg) rotateY(-3deg) translateY(-5px); }
+}
+@keyframes bv-vault-lock-turn { to { transform: rotate(360deg); } }
+@keyframes bv-vault-core {
+  from { box-shadow: 0 0 14px #2563eb26, inset 0 0 12px #60a5fa10; }
+  to { box-shadow: 0 0 28px #38bdf84d, inset 0 0 18px #60a5fa1a; }
+}
+@keyframes bv-vault-scan {
+  0%, 12% { top: 9%; opacity: 0; }
+  22% { opacity: .9; }
+  72% { opacity: .7; }
+  88%, 100% { top: 90%; opacity: 0; }
+}
+@keyframes bv-vault-orbit { to { transform: rotate(343deg); } }
+@keyframes bv-vault-ambient {
+  from { opacity: .55; transform: scale(.94); }
+  to { opacity: 1; transform: scale(1.04); }
+}
+@keyframes bv-vault-status {
+  from { opacity: .55; transform: translateY(2px); }
+  to { opacity: .95; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bv-vault-ambient, .bv-vault-shell, .bv-vault-lock-ring, .bv-vault-lock-core,
+  .bv-vault-scan::after, .bv-vault-orbit, .bv-vault-status {
+    animation: none !important;
+  }
+}
+
+
+/* Futuristic bank-vault hero: heavy circular mechanics with Black Vault branding. */
+.bv-bank-vault {
+  width: 74%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) perspective(1100px) rotateX(4deg) rotateY(-7deg);
+  filter: drop-shadow(0 34px 52px rgba(0, 0, 0, .66));
+  animation: bv-bank-vault-enter .9s cubic-bezier(.22,1,.36,1) both, bv-bank-vault-idle 5.8s 1s ease-in-out infinite;
+}
+.bv-bank-vault-frame {
+  border-radius: 50%;
+  border: 2px solid rgba(125,211,252,.30);
+  background: radial-gradient(circle at 38% 28%, #2c3b52 0%, #131c2a 30%, #09111c 62%, #020508 100%);
+  box-shadow: 0 0 0 7px #07101a, 0 0 0 10px rgba(96,165,250,.14), inset 0 2px 1px rgba(255,255,255,.12), inset 0 -26px 58px rgba(0,0,0,.82), 0 0 54px rgba(37,99,235,.18);
+}
+.bv-bank-vault-frame::before,
+.bv-bank-vault-frame::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.bv-bank-vault-frame::before { inset: 4%; border: 1px solid rgba(191,219,254,.16); box-shadow: inset 0 0 32px rgba(96,165,250,.08); }
+.bv-bank-vault-frame::after { inset: 10%; border: 1px dashed rgba(147,197,253,.14); }
+.bv-bank-vault-ring { border-radius: 50%; border: 1px solid rgba(147,197,253,.18); }
+.bv-bank-vault-ring-outer {
+  background: repeating-conic-gradient(from 0deg, rgba(147,197,253,.18) 0deg 2deg, transparent 2deg 16deg);
+  animation: bv-bank-ring 24s linear infinite;
+}
+.bv-bank-vault-ring-mid {
+  background: radial-gradient(circle, transparent 58%, rgba(10,20,34,.8) 59% 68%, transparent 69%), repeating-conic-gradient(from 6deg, rgba(96,165,250,.12) 0deg 1deg, transparent 1deg 20deg);
+  animation: bv-bank-ring-reverse 18s linear infinite;
+}
+.bv-bank-vault-ring-inner { border-color: rgba(125,211,252,.16); box-shadow: inset 0 0 26px rgba(2,6,12,.82); }
+.bv-bank-vault-door { overflow: hidden; border-radius: 50%; }
+.bv-bank-vault-door-face {
+  border-radius: 50%;
+  border: 2px solid rgba(125,211,252,.28);
+  background: radial-gradient(circle at 42% 36%, #17283d 0%, #0c1724 42%, #050b12 75%, #020407 100%);
+  box-shadow: 0 0 32px rgba(59,130,246,.16), inset 0 0 0 8px #07101a, inset 0 0 0 10px rgba(96,165,250,.10), inset 0 -22px 40px rgba(0,0,0,.72);
+}
+.bv-bank-vault-door-rim {
+  border-radius: 50%;
+  border: 1px solid rgba(147,197,253,.18);
+  background: repeating-conic-gradient(from 0deg, transparent 0deg 28deg, rgba(147,197,253,.10) 28deg 30deg);
+}
+.bv-bank-lock-wheel {
+  width: 58%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1px solid rgba(125,211,252,.34);
+  background: radial-gradient(circle, #102239 0%, #07111b 65%, #02060a 100%);
+  box-shadow: 0 0 24px rgba(56,189,248,.18), inset 0 0 0 5px #02060b, inset 0 0 0 7px rgba(96,165,250,.12);
+  animation: bv-bank-wheel 15s linear infinite;
+}
+.bv-bank-spoke {
+  position: absolute; left: 50%; top: calc(50% - 2px); width: 47%; height: 4px; transform-origin: left center;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(219,234,254,.92), rgba(96,165,250,.42) 46%, transparent);
+  box-shadow: 0 0 8px rgba(96,165,250,.24);
+}
+.bv-bank-spoke::after {
+  content: ""; position: absolute; right: 7%; top: 50%; width: 9px; height: 9px; transform: translateY(-50%);
+  border-radius: 50%; border: 1px solid rgba(191,219,254,.42); background: #091420;
+}
+.bv-bank-spoke-1 { transform: rotate(0deg); }
+.bv-bank-spoke-2 { transform: rotate(60deg); }
+.bv-bank-spoke-3 { transform: rotate(120deg); }
+.bv-bank-spoke-4 { transform: rotate(180deg); }
+.bv-bank-spoke-5 { transform: rotate(240deg); }
+.bv-bank-spoke-6 { transform: rotate(300deg); }
+.bv-bank-brand-core {
+  width: 48%; aspect-ratio: 1; display: grid; place-items: center; transform: translate(-50%, -50%);
+  border-radius: 50%; border: 1px solid rgba(147,197,253,.44); color: #dbeafe;
+  background: radial-gradient(circle at 42% 35%, #173760 0%, #091827 45%, #03080f 100%);
+  box-shadow: 0 0 0 5px rgba(6,16,27,.85), 0 0 0 7px rgba(96,165,250,.16), 0 0 30px rgba(56,189,248,.28), inset 0 0 22px rgba(96,165,250,.16);
+  animation: bv-bank-core-pulse 2.8s ease-in-out infinite alternate;
+}
+.bv-bank-brand-core .bv-mark { width: 64%; height: 64%; filter: drop-shadow(0 0 8px rgba(96,165,250,.48)); }
+.bv-bank-brand-halo { border-radius: 50%; border: 1px solid rgba(125,211,252,.20); box-shadow: 0 0 24px rgba(56,189,248,.18); }
+.bv-bank-bolt {
+  position: absolute; width: 11px; height: 11px; border-radius: 50%;
+  border: 1px solid rgba(191,219,254,.32);
+  background: radial-gradient(circle at 35% 30%, #708cac, #1a2738 62%, #060b12);
+  box-shadow: 0 0 9px rgba(96,165,250,.18);
+}
+.bv-bank-bolt-1 { left: 50%; top: 7%; transform: translateX(-50%); }
+.bv-bank-bolt-2 { left: 79%; top: 19%; }
+.bv-bank-bolt-3 { left: 92%; top: 50%; transform: translateY(-50%); }
+.bv-bank-bolt-4 { left: 79%; top: 81%; }
+.bv-bank-bolt-5 { left: 50%; top: 92%; transform: translateX(-50%); }
+.bv-bank-bolt-6 { left: 21%; top: 81%; }
+.bv-bank-bolt-7 { left: 8%; top: 50%; transform: translateY(-50%); }
+.bv-bank-bolt-8 { left: 21%; top: 19%; }
+.bv-bank-security-sweep { overflow: hidden; border-radius: 50%; pointer-events: none; }
+.bv-bank-security-sweep::after {
+  content: ""; position: absolute; left: 12%; right: 12%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(125,211,252,.85), transparent);
+  box-shadow: 0 0 16px rgba(56,189,248,.52);
+  animation: bv-bank-scan 3.4s ease-in-out infinite;
+}
+.bv-bank-light {
+  position: absolute; top: 24%; bottom: 24%; width: 2px; border-radius: 999px;
+  background: linear-gradient(180deg, transparent, rgba(56,189,248,.7), transparent);
+  box-shadow: 0 0 13px rgba(56,189,248,.45);
+}
+.bv-bank-light-left { left: 8%; }
+.bv-bank-light-right { right: 8%; }
+
+@keyframes bv-bank-vault-enter {
+  from { opacity: 0; transform: translate(-50%, -50%) perspective(1100px) rotateX(8deg) rotateY(-18deg) scale(.80); }
+  to { opacity: 1; transform: translate(-50%, -50%) perspective(1100px) rotateX(4deg) rotateY(-7deg) scale(1); }
+}
+@keyframes bv-bank-vault-idle {
+  0%, 100% { transform: translate(-50%, -50%) perspective(1100px) rotateX(4deg) rotateY(-7deg) translateY(0); }
+  50% { transform: translate(-50%, -50%) perspective(1100px) rotateX(3deg) rotateY(-4deg) translateY(-5px); }
+}
+@keyframes bv-bank-ring { to { transform: rotate(360deg); } }
+@keyframes bv-bank-ring-reverse { to { transform: rotate(-360deg); } }
+@keyframes bv-bank-wheel { to { transform: translate(-50%, -50%) rotate(360deg); } }
+@keyframes bv-bank-core-pulse {
+  from { box-shadow: 0 0 0 5px rgba(6,16,27,.85), 0 0 0 7px rgba(96,165,250,.14), 0 0 20px rgba(56,189,248,.20), inset 0 0 18px rgba(96,165,250,.14); }
+  to { box-shadow: 0 0 0 5px rgba(6,16,27,.85), 0 0 0 7px rgba(96,165,250,.24), 0 0 36px rgba(56,189,248,.34), inset 0 0 28px rgba(96,165,250,.22); }
+}
+@keyframes bv-bank-scan {
+  0%, 10% { top: 10%; opacity: 0; }
+  20% { opacity: .92; }
+  78% { opacity: .74; }
+  92%, 100% { top: 90%; opacity: 0; }
+}
+
+/* Launch story: the original Black Vault mark spins in, then yields to the dashboard. */
+.vault-splash {
+  animation: bv-launch-backdrop 3.1s ease both;
+}
+.bv-logo-copy {
+  animation: bv-logo-copy 3.1s ease both;
+}
+@keyframes bv-logo-copy {
+  0%, 72% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+@keyframes bv-launch-backdrop {
+  0%, 78% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.bv-dialog-enter {
+  animation: bv-dialog-enter .3s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes bv-dialog-enter {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vault-splash, .bv-logo-copy, .bv-dialog-enter {
+    animation: none !important;
+  }
+}
+
 /* Authenticated-only transition: globe and form recede, then the workspace
    resolves into focus. The auth view stays mounted until native unlock succeeds. */
 @keyframes bv-auth-exit {
@@ -173,11 +698,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid #60a5fa; outline-
   100% { opacity: 0; transform: scale(1.075); filter: blur(12px); }
 }
 .bv-auth-exit { pointer-events: none; animation: bv-auth-exit .6s cubic-bezier(.5,0,.8,.2) both; }
-@keyframes bv-dashboard-enter {
-  from { opacity: 0; transform: translateY(16px) scale(.987); filter: blur(7px); }
-  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-}
-.bv-dashboard-enter { animation: bv-dashboard-enter .8s cubic-bezier(.2,.9,.2,1) both; }
 @media (prefers-reduced-motion: reduce) {
-  .bv-auth-exit, .bv-dashboard-enter { animation: none; }
+  .bv-auth-exit { animation: none; }
 }

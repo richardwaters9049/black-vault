@@ -6,6 +6,14 @@ export interface DesktopInfo {
   platform: string;
   architecture: string;
 }
+export interface BiometricStatus {
+  available: boolean;
+  kind: 'touch_id' | 'face_id' | 'optic_id' | 'biometric' | 'none';
+  platform: string;
+}
+export interface BiometricAuthResult {
+  authenticated: boolean;
+}
 export interface SelectedFile {
   name: string;
   sizeBytes: number;
@@ -32,6 +40,8 @@ export interface TrustedContact {
 }
 
 interface Commands {
+  get_biometric_status: BiometricStatus;
+  authenticate_biometric: BiometricAuthResult;
   get_desktop_info: DesktopInfo;
   select_file: SelectedFile | null;
   list_vaults: VaultSummary[];
@@ -70,6 +80,8 @@ function call<K extends keyof Commands>(command: K, args?: Record<string, unknow
   return invoke<Commands[K]>(command, args);
 }
 export const native = {
+  getBiometricStatus: () => call('get_biometric_status'),
+  authenticateBiometric: () => call('authenticate_biometric'),
   getDesktopInfo: () => call('get_desktop_info'),
   selectFile: () => call('select_file'),
   listVaults: () => call('list_vaults'),

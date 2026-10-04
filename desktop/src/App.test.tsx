@@ -54,7 +54,7 @@ beforeEach(async () => {
   root = createRoot(host);
   await act(async () => { root.render(<App />); });
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 async function ready() {
   await act(async () => { await vi.advanceTimersByTimeAsync(2800); });
@@ -141,4 +141,22 @@ it('shows and hides the creation password without changing its value', async () 
   await click('Hide');
   expect(password?.type).toBe('password');
   expect(password?.value).toBe('a unique disposable test password');
+});
+
+
+it('starts both operation tabs with an empty password even with a development password configured', async () => {
+  vi.stubEnv('DEV', true);
+  vi.stubEnv('VITE_DEV_VAULT_PASSWORD', 'must-not-be-prefilled');
+  await act(async () => { root.unmount(); });
+  root = createRoot(host);
+  await act(async () => { root.render(<App />); });
+  await ready();
+
+  for (const tab of ['Encryption', 'Decryption']) {
+    await click(tab);
+    const password = host.querySelector<HTMLInputElement>('input[aria-label="Vault password"]');
+    expect(password).not.toBeNull();
+    expect(password?.value).toBe('');
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+  }
 });

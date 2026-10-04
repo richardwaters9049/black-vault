@@ -19,7 +19,7 @@ export default function VaultAccess({ onAuthenticated }: { onAuthenticated: (vau
   const [selected, setSelected] = useState('');
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
-  const [password, setPassword] = useState(import.meta.env.DEV ? (import.meta.env.VITE_DEV_VAULT_PASSWORD ?? '') : '');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

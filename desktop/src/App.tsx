@@ -309,7 +309,7 @@ export default function App() {
       </section>
       <div className="mt-auto hidden space-y-3 pt-12 md:block">
         <div className="flex items-center gap-2 text-xs text-slate-400"><span className="size-1.5 rounded-full bg-emerald-400" /> On this Mac</div>
-        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-600">Desktop preview · {info?.version ?? '—'}</p>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-600">Black Vault · {info?.version ?? '—'}</p>
       </div>
     </aside>
 
@@ -510,7 +510,7 @@ export default function App() {
 
       {error && <p role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/5 px-4 py-3 text-sm text-red-300">{error}</p>}
       <p role="status" className="mt-4 flex items-center gap-2 text-xs text-slate-400">{notice && <><Check size={14} className="text-emerald-400" />{notice}</>}</p>
-      <footer className="mt-8 flex flex-wrap justify-between gap-2 border-t border-border pt-5 font-mono text-[10px] uppercase tracking-widest text-slate-600"><span>Black Vault · Desktop foundation</span><span>{info ? `${info.platform} / ${info.architecture}` : 'Native connection pending'} · Auto-lock after {DEFAULT_IDLE_MS / 60000} min idle</span></footer>
+      <footer className="mt-8 flex flex-wrap justify-between gap-2 border-t border-border pt-5 font-mono text-[10px] uppercase tracking-widest text-slate-600"><span>Black Vault · Local encrypted storage</span><span>{info ? `${info.platform} / ${info.architecture}` : 'Native connection pending'} · Auto-lock after {DEFAULT_IDLE_MS / 60000} min idle</span></footer>
     </main>
     </motion.div>
   </>;

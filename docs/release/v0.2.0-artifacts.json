@@ -1,0 +1,79 @@
+{
+  "candidate": "0.2.0-rc.1",
+  "source_commit": "6f90652d25a064a2bddc85d1193b97f534fe73b5",
+  "date": "2026-10-04",
+  "local_artifacts": [
+    {
+      "path": "local/BlackVault-0.2.0-rc.1-macos-arm64.dmg",
+      "platform": "macOS arm64",
+      "sha256": "9fe14e220bf7e62b5654c01d95cd51467be870a9e4f76728fee8075dca353d01",
+      "bytes": 3701363,
+      "signing": "ad-hoc; not notarised"
+    }
+  ],
+  "ci_run": "https://github.com/richardwaters9049/black-vault/actions/runs/37198649703",
+  "ci_status": "success",
+  "manual_acceptance": "pending for current candidate",
+  "ci_jobs": [
+    {
+      "name": "macOS arm64",
+      "status": "completed",
+      "conclusion": "success",
+      "job_id": 111425600392
+    },
+    {
+      "name": "Windows x64",
+      "status": "completed",
+      "conclusion": "success",
+      "job_id": 111425600562
+    },
+    {
+      "name": "Linux x64",
+      "status": "completed",
+      "conclusion": "success",
+      "job_id": 111425600584
+    }
+  ],
+  "ci_archive_metadata": [
+    {
+      "id": 11302740749,
+      "name": "black-vault-6f90652d25a064a2bddc85d1193b97f534fe73b5-windows-x64",
+      "size_in_bytes": 2788044,
+      "digest": "sha256:d4b77f02d3a982d78c933e6d4471b497419db0670304f3999200bbfc1a2035e9"
+    },
+    {
+      "id": 11302701589,
+      "name": "black-vault-6f90652d25a064a2bddc85d1193b97f534fe73b5-linux-x64",
+      "size_in_bytes": 88133139,
+      "digest": "sha256:9dfa8964088cd8f3c11f2ed630da0365239c364d1e4837655741c610b075b277"
+    },
+    {
+      "id": 11301683287,
+      "name": "black-vault-6f90652d25a064a2bddc85d1193b97f534fe73b5-macos-arm64",
+      "size_in_bytes": 3974569,
+      "digest": "sha256:e2e4d4caef5f4a750279da1dbf5c7d179b3aff4d0c42a53688ec52a7a2a93e52"
+    }
+  ],
+  "ci_artifacts": [
+    {
+      "path": "ci/BlackVault-0.2.0-rc.1-linux-x64.AppImage",
+      "sha256": "19590b150b47325d416abc465be9d7e3bc6830b9df410b1ad642591adf7916f7",
+      "bytes": 83585528
+    },
+    {
+      "path": "ci/BlackVault-0.2.0-rc.1-linux-x64.deb",
+      "sha256": "b33cbe5bd266a467337295c841084600c6d1c64feeaa18977fbbf7b487f0a704",
+      "bytes": 5196902
+    },
+    {
+      "path": "ci/BlackVault-0.2.0-rc.1-macos-arm64.dmg",
+      "sha256": "48972408f8d142ab6ae888e8187bd76c87faade709d098f7f34bfe288baf6ca1",
+      "bytes": 3993591
+    },
+    {
+      "path": "ci/BlackVault-0.2.0-rc.1-windows-x64-setup.exe",
+      "sha256": "ba9ebcbe75f0da567382700916cb0f1fbe4de2f5f41e1b1cf08f3f1d8b695c12",
+      "bytes": 2806331
+    }
+  ]
+}

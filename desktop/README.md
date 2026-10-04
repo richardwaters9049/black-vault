@@ -1,141 +1,72 @@
 # Black Vault Desktop
 
-Sprint 01 introduced a standalone macOS application using Tauri 2, React, Vite, TypeScript and Tailwind CSS. Sprint 02 now adds the first offline local-vault lifecycle: create, list, unlock and lock. The existing `backend/`, `frontend/` and cryptographic compatibility suite remain unchanged.
+**Current candidate:** 0.2.0-rc.1. This is the active offline Tauri application. The web-era backend and frontend are historical references and are not runtime dependencies.
 
-Vault headers are authenticated and encrypted locally. Each vault gets a separate random 256-bit master key, wrapped using a password-derived key. Display names are encrypted and hidden while locked. The original metadata-preview picker still returns metadata only. The separate **Import and encrypt** action in an unlocked vault now stores authenticated encrypted files (5 MiB per file), and **Export** explicitly creates a new plaintext file without overwriting an existing destination. SQLite metadata, account recovery and sharing are not implemented yet.
+## Development and packaging
 
-## Prerequisites
-
-- macOS with Apple command-line developer tools (`xcode-select --install` if missing).
-- Rust 1.90 or newer, installed through rustup.
-- Node.js 22.12 or newer and npm; `.nvmrc` pins the version used for this sprint.
-- No running API server, PostgreSQL or Docker is needed for the desktop application.
-
-The bundle targets macOS 13.3 and newer. This sprint is tested on the host's Apple Silicon architecture; an Intel/universal build requires the corresponding Rust targets and separate validation.
-
-## Development
-
-Run from `desktop/`:
+**Directory:** `/Users/richy/Documents/Github/cyber-work/black-vault/desktop` on the development Mac, or `desktop/` in another checkout.
 
 ```bash
 npm ci
 npm run desktop:dev
 ```
 
-The Tauri CLI starts Vite on `127.0.0.1:1420`, compiles Rust and launches the native window. The port is fixed so a collision fails visibly. Rust changes rebuild the application; React changes use hot reloading. The first Rust build downloads and compiles the macOS dependencies and takes longer.
-
-`npm run dev` alone opens a browser preview. It cannot open the native picker; the dashboard reports that a desktop application is required.
-
-## Production application
-
-```bash
-npm run desktop:build
-```
-
-This type-checks and bundles the React application, compiles Rust in release mode and creates:
-
-```text
-src-tauri/target/release/bundle/macos/Black Vault.app
-```
-
-Launch that bundle from Finder. It includes the built frontend and does not require Vite, Node.js or the existing backend to run.
-
-The configuration uses an ad-hoc signature for local testing. This is not a Developer ID signed or notarised distribution. Before distribution, confirm the bundle identifier, configure your own signing identity and notarisation credentials, and validate the supported macOS versions. No signing credentials are stored in this repository.
-
-## Checks
+Vite binds to `127.0.0.1:1420`; Tauri provides native IPC and the application window. Browser-only preview cannot perform protected native operations.
 
 ```bash
 npm test
-npm run typecheck
 npm run build
-npm run test:rust
-cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+cargo test --manifest-path src-tauri/Cargo.toml --locked
 cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+npm run desktop:build
 ```
 
-Frontend tests exercise the typed wrapper with Tauri's mocked IPC transport and render the dashboard and vault controls. They cover selection, cancellation, errors, safe filename rendering, creation, locking, unlocking and browser-only rejection. Rust tests cover metadata validation, IPC permissions, local encrypted vault persistence, wrong passwords, tampering, independent vaults, invalid inputs and the shared Argon2id compatibility vectors. The native picker and complete lifecycle must also be exercised manually on macOS.
+Requires Node.js 22.12+, Rust 1.90+ and native Tauri prerequisites. On macOS, packaging creates `src-tauri/target/release/bundle/macos/Black Vault.app`. The app includes its frontend and needs no development server. Minimum configured macOS version is 13.3; the tested native target is Apple Silicon. Ad-hoc signing is not Developer ID signing or notarisation.
 
-Run the original suites separately from the repository root:
+## Workspace and authentication
 
-```bash
-(cd backend && cargo test --locked)
-(cd frontend && npm test)
-```
+Startup locks any prior Rust session before native initialisation completes. The Overview may display non-sensitive information while locked. Encryption and Decryption require native vault creation/unlock before protected file controls appear. Neither tab prefills a password, including development builds. The UI cannot create a session without a successful Rust authentication response.
 
-Those existing suites require their original prerequisites; the live HTTP test additionally requires `BLACK_VAULT_TEST_API` and a running backend. Avoid running the CPU-intensive crypto tests during a fresh release compilation: their existing five-second timeouts can expire under load. No crypto parameters or tests were relaxed for the desktop migration.
+Lock/sign-out clears protected UI state after native locking; inactivity requests a lock after five minutes and checks wall-clock expiry after delayed timers or focus changes. This is not a native OS sleep listener.
 
-## Structure
+Touch ID is confined to native confirmation of permanent vault deletion when available. It does not unlock a vault or recover a password. There is no standalone biometric-success IPC command. See the [biometric security model](../docs/security/BIOMETRIC_SECURITY_MODEL.md).
 
-```text
-desktop/
-├── src/App.tsx                   Dashboard and selection state
-├── src/components/VaultWorkspace.tsx  Create, list, unlock and lock UI
-├── src-tauri/src/vault.rs        Per-vault encryption and local lifecycle
-├── src/components/ui/           Adapted existing UI components
-├── src/lib/native.ts            Typed invoke boundary and error presentation
-├── src-tauri/src/commands.rs    Native status, picker and metadata validation
-├── src-tauri/capabilities/      Main-window command allow-list
-├── src-tauri/tauri.conf.json    macOS window, CSP and bundle configuration
-├── assets/icon.svg             Editable application icon source
-├── package-lock.json           Locked JavaScript dependencies
-└── src-tauri/Cargo.lock         Locked Rust dependencies
-```
+## Native command boundary
 
-`Card` and `cn` are copied from the existing frontend. `Button` adapts the existing styling with native HTML button semantics, avoiding a second UI primitive dependency. These files are intentionally local copies so this scaffold builds independently; a shared UI package can follow when both applications need joint changes. The existing Next.js routing, authentication and server-dependent dashboard are not pulled into this desktop foundation.
+`src/lib/native.ts` maps typed calls to `src-tauri/src/commands.rs` and `contact_commands.rs`. `build.rs` registers the commands; `capabilities/default.json` permits them only for the local `main` window. No generic filesystem, shell or HTTP permission is granted. Production CSP restricts resources to the application and Tauri IPC.
 
-## Command contract and security boundary
+| Command family | Authority and returned data |
+| --- | --- |
+| Vault lifecycle | Rust validates passwords/IDs; locked display names remain unavailable |
+| Picker/drop import | Native selection is revalidated in Rust; no arbitrary JS filesystem paths |
+| File and nested operations | Require the native root session and, where applicable, nested PIN |
+| Text editor | Authorised plaintext in WebView memory; saves re-encrypt into the vault |
+| Export | Explicit native save selection creates a plaintext copy; refuses unsafe overwrite |
+| Locked-vault deletion | Exact typed confirmation plus fresh native biometrics when available |
+| Identity/contact commands | Public identity and contact metadata only; private identity keys stay native |
 
-The Rust command return types use camelCase serialisation, mirrored by the TypeScript `Commands` mapping in `src/lib/native.ts`:
+Error payloads are bounded `{ code, message }` records. Release diagnostics do not log secrets, filenames or paths. Rust keeps active key material in best-effort zeroising containers; this is not guaranteed erasure from every OS/runtime copy.
 
-| Command | Arguments | Success result |
-| --- | --- | --- |
-| `get_desktop_info` | None | `{ appName, version, platform, architecture }` |
-| `select_file` | None | `{ name, sizeBytes }`, or `null` on cancellation |
-| `list_vaults` | None | Array of `{ id, name, isLocked }`; name is `null` when locked |
-| `create_vault` | `{ name, password }` | Newly created and unlocked vault summary |
-| `unlock_vault` | `{ vaultId, password }` | Unlocked vault summary or structured error |
-| `lock_vault` | None | Releases active in-memory master key |
-| `import_vault_file` | None; native picker | Encrypted file summary, or null on cancellation |
-| `list_vault_files` | None; requires unlocked vault | Decrypted file summaries, with no plaintext contents |
-| `export_vault_file` | `{ fileId }`; native save picker | Summary of exported plaintext file, or null on cancellation |
+## Storage and limits
 
-Failures are serialised as `{ code, message }`. A native picker supplies the path inside Rust; JavaScript cannot request metadata for arbitrary paths. Only the basename and byte count cross IPC. Rust validates that the selection is a regular file and that its size fits JavaScript's safe integer range. Blocking picker work runs off the main event loop; a Rust mutex prevents concurrent dialogs.
+Local vault files contain authenticated encrypted headers, filenames and contents, with per-vault and per-file key separation. Imports are bounded to 5 MiB and screened before encryption/persistence. The scanner is a conservative static policy, not antivirus. Nested four-digit PINs are convenience locks additionally protected by the parent vault key; they do not provide VM isolation or replace a strong master password.
 
-`build.rs` registers the application commands with Tauri's permission system. Only the local `main` window receives their permissions. The webview has no filesystem, shell, HTTP or direct dialog-plugin permissions. The Rust dialog plugin is invoked by the dedicated command. Production CSP blocks remote resources and network connections; development allows the loopback Vite/HMR connection in addition to Tauri IPC, plus the inline scripts and styles injected by Vite. CSP remains enabled in both modes.
+Public contact documents and trust state are versioned JSON with bounded reads, strict validation, restrictive Unix permissions and atomic writes. They are not encrypted vault metadata or authenticated against arbitrary valid local replacement. OS credential storage separately protects the private transfer identity and fails without a plaintext fallback. Backing up vault files alone does not back up the OS identity.
 
-Selection/cancellation/rejection events go to process diagnostics without filenames, paths or content. Durable audit storage is future work. Black Vault's vault storage persists authenticated encrypted headers and file envelopes, not plaintext file data, raw keys or passwords. A user-authorised export intentionally writes a new plaintext file at the chosen destination; protect or delete that exported copy separately.
+## Transfer scope
 
-## Sprint 02
+`transfer.rs` and `transfer_codec.rs` implement Rust-only recipient encryption, sender signatures and parsing; a libFuzzer harness and deterministic hostile-input tests exercise decoding. Trusted Contacts implements public identity/fingerprint management. Package send/receive IPC, native package persistence, received-vault UI, replay history and complete transfer acceptance are deferred. See the [implementation status](../docs/architecture/SECURE_SHARING_IMPLEMENTATION_PLAN.md).
 
-**Implemented foundation:** Standalone Rust cryptography uses the same canonical Argon2id parameters and shared key-derivation test fixtures as the existing backend: v19, 19,456 KiB, 2 iterations, parallelism 1, 16-byte random salt, 32-byte KEK. Each vault receives a fresh random 32-byte master key; AES-256-GCM wraps it together with the display name, using a random 12-byte nonce and domain-separated vault-ID AAD. The disk header contains the version, opaque random ID, KDF parameters and authenticated ciphertext. The vaults reside under Tauri's application-local data directory, not in the source tree. On Unix, the vault directory is set to mode `0700` and new header files to `0600`; new headers are written using a create-new temporary file, sync, same-directory rename and directory sync. Only one vault can be unlocked per application session. Rust retains the key in zeroising memory, and locking drops it; JavaScript never receives a key. Locked names remain encrypted. This is best-effort process-memory clearing, not protection from malware controlling an unlocked host.
+## Verification and acceptance
 
-**Sprint 02 file storage delivered:** Independent random per-file 256-bit DEKs, wrapped under the active vault master key using AES-256-GCM with domain-separated vault/file AAD. The encrypted filename and bounded contents are stored together in a versioned authenticated envelope beneath the vault's private local directory. Rust revalidates the native-picked regular file (rejecting symlinks) and caps import at 5 MiB; exports use a native save picker and create-new semantics. The source is never deleted. **Remaining work:** design encrypted metadata and crash recovery; exercise the native application manually (create, quit, restart, wrong password, unlock, lock); add file-access and lifecycle regression tests. This implementation reads bounded files in memory; it is not streaming encryption. There is no SQLite database, account recovery, audit chain or sharing functionality in this slice. Losing a vault password currently means losing access; do not put irreplaceable data in this foundation build.
+See the dated [candidate validation](../docs/release/v0.2.0-validation.md). Routine CI uses Linux checks; release branches/manual dispatch run the three-OS packaging matrix. The Linux matrix validates local vault functionality even without a graphical Secret Service session; that does not establish Linux identity-store acceptance.
+
+The [candidate manual checklist](../docs/release/v0.2.0-manual-acceptance.md) covers packaged GUI, real Touch ID, clipboard, restart, backup/restore, keyboard navigation and OS acceptance. Use disposable data. Test success with mocked IPC does not prove these native interactions.
 
 ## References
 
-- [Tauri's Vite integration](https://v2.tauri.app/start/frontend/vite/)
-- [Tauri command capabilities](https://v2.tauri.app/security/capabilities/)
-- [Native dialog plugin](https://v2.tauri.app/plugin/dialog/)
-
-### Sprint 03 — Startup and sign-in
-From the repository root use `./start.sh` to open the compiled app, `./start.sh build` to rebuild, `./start.sh dev` for Tauri development, and `./start.sh test` for desktop checks. Startup locks any previously open Rust vault before displaying a geometric splash and the vault-password sign-in screen. First-time setup creates a vault; subsequent launches require its password. Sign-out locks the Rust vault before hiding the dashboard. No separate account or online authentication is implemented. See `../docs/sprints/sprint-03/SPRINT_03_AUTH_EXPERIENCE.md` for acceptance and limitations.
-
-### Inactivity lock
-The React desktop session calls Rust `lock_vault` after five minutes without keyboard, pointer, wheel or touch activity. Wall-clock checking detects a delayed interval after sleep/resume, but this is not a native OS sleep listener. First-time setup includes development-only example placeholders, never prefilled credentials. See `../docs/sprints/sprint-04/SPRINT_04_AUTO_LOCK.md`.
-
-### Blue/black identity and password visibility
-`src/components/VaultMark.tsx` is the shared scalable SVG brand mark used by the splash, authentication and sidebar. Splash motion is CSS-based and honours reduced-motion preferences. First-time vault creation includes a masked-by-default Show/Hide password button; toggling it does not persist or change the password. Avoid using the public development example password with real files.
-
-Splash polish: the large vault mark now completes a perspective Y-axis spin with a small overshoot during the 2.8-second startup reveal. The progress stroke tracks the longer reveal. Reduced-motion disables the spin; native lock/desktop initialisation still gates navigation.
-
-Spin refinement: the splash logo now uses a single fast 0.95-second 2D revolution rather than a slow perspective Y-axis flip and overshoot, preventing the planar SVG from visually disappearing/snapping at the end. The overall startup reveal remains 2.8 seconds; reduced motion is unchanged.
-
-### Pre-import screening
-`src-tauri/src/import_scan.rs` runs in Rust after the native picker and before encryption/persistence. It blocks selected executable/script/macro/archive formats and known high-risk signatures/patterns. The scan is offline and bounded to 5 MiB. A pass is not antivirus clearance; the source remains unchanged. See `../docs/sprints/sprint-04/SPRINT_04_IMPORT_SCREENING.md` for threat model, tests and limitations.
-
-Example Files: four built-in Rust-owned samples accessible below Overview, using the same pre-import scanner and encryption path. Locked vault deletion is available on the sign-in screen with `DELETE <full vault ID>` confirmation; there is no password reset. See `../docs/sprints/sprint-05/SPRINT_05_EXAMPLES_VAULT_LIFECYCLE.md`.
-
-
-### Nested vault workspace
-
-The sidebar opens each nested container as a separate, PIN-gated view. `create_nested_text_file` authenticates the four-digit PIN in Rust and atomically rewrites the encrypted nested record with a new TXT/MD/JSON/CSV/LOG envelope; it does not export plaintext. The interface clears the nested inventory and drafts when its compartment is locked. See `../docs/sprints/sprint-06/SPRINT_06_NESTED_VAULT_WORKSPACE.md` for limitations and acceptance.
+- [As-built architecture](../docs/architecture/Architecture.md)
+- [Desktop security architecture](../docs/architecture/DESKTOP_SECURITY_ARCHITECTURE.md)
+- [Threat model](../docs/security/THREAT_MODEL.md)
+- [Historical v0.1.0 record](../docs/release/v0.1.0-validation.md)

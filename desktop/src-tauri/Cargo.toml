@@ -1,7 +1,7 @@
 [package]
 name = "black-vault-desktop"
-version = "0.1.0"
-description = "Black Vault desktop foundation"
+version = "0.2.0-rc.1"
+description = "Offline encrypted vault and trusted contacts"
 edition = "2024"
 rust-version = "1.90"
 

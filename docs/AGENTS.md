@@ -1,5 +1,14 @@
 # Black Vault — Engineering and Agent Rules
 
+## Current baseline — 4 October 2026
+
+Active candidate: `release/0.2.0-rc.1`, version `0.2.0-rc.1`. Root/desktop README, current architecture/threat model and `release/v0.2.0-validation.md` describe the current implementation. Earlier dated sprint descriptions below are historical context, not evidence that new candidate acceptance is complete. Never silently overwrite historical v0.1.0 release records.
+
+Touch ID authorises permanent deletion natively when available; password authentication still unwraps vault keys. There is no standalone biometric-success IPC command. Trusted contacts/OS identity storage and Rust transfer primitives are implemented; end-user package send/receive, replay history and biometric vault enrolment are deferred. Contact metadata/trust JSON is not encrypted or authenticated against valid local replacement.
+
+Routine CI uses Linux validation. Reserve full native packaging for release branches/manual dispatch. Record real OS credential and packaged-GUI evidence separately; never tick human-present biometric/GUI acceptance from mocked/unit tests.
+
+
 Updated: 29 September 2026. Active work: **offline-first desktop application**. Sprint 10 automated security/recovery work is complete; packaged-app acceptance and public distribution checks remain open. Read the root [README](../README.md), [desktop README](../desktop/README.md), [Sprint 02 record](sprints/sprint-02/SPRINT_02_VAULT_FOUNDATION.md) and [security design](architecture/DESKTOP_SECURITY_ARCHITECTURE.md) before changing security-sensitive code.
 
 ## Scope and source of truth

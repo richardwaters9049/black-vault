@@ -76,7 +76,7 @@ mod platform {
         }
 
         let empty = NSString::from_str("");
-        let reason = NSString::from_str("Authenticate to Black Vault");
+        let reason = NSString::from_str("Confirm permanent Black Vault deletion");
         // Hide the system password fallback because this command promises biometric-only authentication.
         // SAFETY: NSString values and the retained context outlive these property calls.
         unsafe { context.setLocalizedFallbackTitle(Some(&empty)) };
@@ -164,11 +164,6 @@ pub fn get_biometric_status() -> Result<BiometricStatus, BiometricError> {
     platform::status()
 }
 
-#[tauri::command]
-pub fn authenticate_biometric() -> Result<BiometricAuthResult, BiometricError> {
-    platform::authenticate()
-}
-
 #[cfg(test)]
 mod tests {
     use super::{BiometricAuthResult, BiometricError, BiometricStatus, authorize_if_available};
@@ -217,11 +212,44 @@ mod tests {
     }
 
     #[test]
+    fn destructive_authorization_fails_closed_when_status_is_unavailable() {
+        let result = authorize_if_available(
+            || {
+                Err(BiometricError {
+                    code: "status_failed",
+                    message: "unavailable",
+                })
+            },
+            || panic!("authentication must not run after failed preflight"),
+        );
+        assert_eq!(result.unwrap_err().code, "status_failed");
+    }
+
+    #[test]
+    fn destructive_authorization_rejects_a_false_success_response() {
+        let result = authorize_if_available(
+            || {
+                Ok(BiometricStatus {
+                    available: true,
+                    kind: "touch_id".into(),
+                    platform: "test".into(),
+                })
+            },
+            || {
+                Ok(BiometricAuthResult {
+                    authenticated: false,
+                })
+            },
+        );
+        assert_eq!(result.unwrap_err().code, "biometric_failed");
+    }
+
+    #[test]
     #[cfg(not(target_os = "macos"))]
     fn unsupported_platform_reports_unavailable_without_authenticating() {
         let status = super::get_biometric_status().expect("status should be queryable");
         assert!(!status.available);
         assert_eq!(status.kind, "none");
-        assert!(super::authenticate_biometric().is_err());
+        assert!(super::platform::authenticate().is_err());
     }
 }

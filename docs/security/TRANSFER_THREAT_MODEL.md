@@ -1,7 +1,7 @@
 # Black Vault Transfer Threat Model
 
 Updated: 2 October 2026  
-Scope: proposed cross-user `.blackvault` transfer protocol
+Scope: Rust transfer foundation and future cross-user `.blackvault` workflows
 
 This document extends the local-vault threat model. The transfer channel is assumed hostile.
 
@@ -94,4 +94,4 @@ This is an expected condition. Confidentiality and integrity of the package shou
 
 ## Review boundary
 
-The protocol is not yet implemented and has not undergone independent cryptographic review. These controls are requirements for implementation, not claims about the current 0.1.0 application.
+The Rust cryptographic/parser foundation and identity/contact management are implemented. Native package send/receive, durable replay tracking, authenticated contact trust-state protection and received-vault UI are not implemented. The table describes required controls; it is not a claim that every control is delivered in 0.2.0-rc.1. No independent cryptographic review or end-user transfer acceptance is claimed. See the current implementation status in `../architecture/SECURE_SHARING_IMPLEMENTATION_PLAN.md`.

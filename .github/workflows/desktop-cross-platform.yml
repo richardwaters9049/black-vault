@@ -6,11 +6,49 @@ on:
     branches: [main, "release/**"]
     paths: ["desktop/**", ".github/workflows/desktop-cross-platform.yml"]
   workflow_dispatch:
+# Superseded commits must not consume another complete runner allocation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
+  validation:
+    name: Linux validation
+    # Development uses one runner; release runs use the full matrix below.
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90"
+          components: clippy, rustfmt
+      - name: Linux native dependencies
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
   desktop:
     name: ${{ matrix.name }}
+    # Native acceptance and packaging are reserved for intentional release runs.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/'))
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -56,14 +94,15 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: macOS Keychain acceptance
         if: runner.os == 'macOS'
-        run: cargo test --manifest-path src-tauri/Cargo.toml identity_store::tests::macos_keychain_binary_secret_round_trip -- --ignored
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked identity_store::tests::macos_keychain_binary_secret_round_trip -- --ignored
       - name: Windows Credential Manager acceptance
         if: runner.os == 'Windows'
-        run: cargo test --manifest-path src-tauri/Cargo.toml identity_store::tests::windows_credential_manager_binary_secret_round_trip -- --ignored
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked identity_store::tests::windows_credential_manager_binary_secret_round_trip -- --ignored
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
       - name: Build native release package
         run: npm run tauri -- build --bundles ${{ matrix.bundles }}
       - name: Upload native release candidate

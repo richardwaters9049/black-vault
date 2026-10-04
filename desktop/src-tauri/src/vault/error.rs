@@ -15,6 +15,13 @@ impl VaultError {
         Self::storage()
     }
 
+    pub(crate) fn destructive_auth_required() -> Self {
+        Self::new(
+            "destructive_auth_required",
+            "Biometric authentication is required before this vault can be permanently deleted.",
+        )
+    }
+
     pub(crate) fn locked() -> Self {
         Self::new("vault_locked", "Unlock a vault to access files.")
     }

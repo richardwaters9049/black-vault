@@ -135,6 +135,30 @@ mod platform {
     }
 }
 
+fn authorize_if_available(
+    status: impl FnOnce() -> Result<BiometricStatus, BiometricError>,
+    authenticate: impl FnOnce() -> Result<BiometricAuthResult, BiometricError>,
+) -> Result<(), BiometricError> {
+    let status = status()?;
+    if !status.available {
+        return Ok(());
+    }
+
+    let result = authenticate()?;
+    if result.authenticated {
+        Ok(())
+    } else {
+        Err(BiometricError {
+            code: "biometric_failed",
+            message: "Biometric authentication was unsuccessful.",
+        })
+    }
+}
+
+pub(crate) fn authorize_destructive_action() -> Result<(), BiometricError> {
+    authorize_if_available(platform::status, platform::authenticate)
+}
+
 #[tauri::command]
 pub fn get_biometric_status() -> Result<BiometricStatus, BiometricError> {
     platform::status()
@@ -147,6 +171,51 @@ pub fn authenticate_biometric() -> Result<BiometricAuthResult, BiometricError> {
 
 #[cfg(test)]
 mod tests {
+    use super::{BiometricAuthResult, BiometricError, BiometricStatus, authorize_if_available};
+    use std::cell::Cell;
+
+    #[test]
+    fn destructive_authorization_skips_prompt_when_biometrics_are_unavailable() {
+        let prompted = Cell::new(false);
+        let result = authorize_if_available(
+            || {
+                Ok(BiometricStatus {
+                    available: false,
+                    kind: "none".into(),
+                    platform: "test".into(),
+                })
+            },
+            || {
+                prompted.set(true);
+                Ok(BiometricAuthResult {
+                    authenticated: true,
+                })
+            },
+        );
+        assert!(result.is_ok());
+        assert!(!prompted.get());
+    }
+
+    #[test]
+    fn destructive_authorization_requires_success_when_biometrics_are_available() {
+        let result = authorize_if_available(
+            || {
+                Ok(BiometricStatus {
+                    available: true,
+                    kind: "touch_id".into(),
+                    platform: "test".into(),
+                })
+            },
+            || {
+                Err(BiometricError {
+                    code: "biometric_failed",
+                    message: "cancelled",
+                })
+            },
+        );
+        assert_eq!(result.unwrap_err().code, "biometric_failed");
+    }
+
     #[test]
     #[cfg(not(target_os = "macos"))]
     fn unsupported_platform_reports_unavailable_without_authenticating() {

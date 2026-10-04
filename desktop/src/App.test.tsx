@@ -5,7 +5,7 @@ import { mockIPC } from '@tauri-apps/api/mocks';
 import App from './App';
 vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }));
 vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => ({ onDragDropEvent: async () => () => {} }) }));
-import type { VaultSummary } from './lib/native';
+import { native, type VaultSummary } from './lib/native';
 
 const id = '1234567890abcdef1234567890abcdef';
 let root: Root;
@@ -45,6 +45,7 @@ beforeEach(async () => {
     }
     if (command === 'select_file') return null;
     if (command === 'list_vault_files') { vaultFileReads += 1; return [{ id: 'secret-file', name: 'private-plan.txt', sizeBytes: 128 }]; }
+    if (command === 'list_nested_vaults') return [];
     if (command === 'list_contacts') return [];
     throw new Error('Unexpected command: ' + command);
   });
@@ -53,7 +54,7 @@ beforeEach(async () => {
   root = createRoot(host);
   await act(async () => { root.render(<App />); });
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 async function ready() {
   await act(async () => { await vi.advanceTimersByTimeAsync(2800); });
@@ -167,4 +168,58 @@ it('does not offer biometric verification as a substitute for vault unlock', asy
   expect(host.textContent).not.toContain('Verify Touch ID');
   expect(host.textContent).toContain('Your password unlocks the vault.');
   expect(host.querySelector<HTMLInputElement>('input[aria-label="Vault password"]')).not.toBeNull();
+});
+
+it('keeps password access available if the biometric status read fails', async () => {
+  await ready();
+  vi.spyOn(native, 'getBiometricStatus').mockRejectedValue(new Error('status unavailable'));
+  await click('Decryption');
+  await input('Vault name', 'Personal'); await input('Vault password', 'correct horse battery staple'); await submit();
+  expect(host.textContent).toContain('Authenticated vault workspace');
+});
+it('does not resurrect a nested plaintext editor after its details close', async () => {
+  const nestedId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const file = { id: 'protected-file', name: 'protected.txt', sizeBytes: 3 };
+  vi.spyOn(native, 'listNestedVaults').mockResolvedValue([{ id: nestedId, fileCount: 1 }]);
+  vi.spyOn(native, 'unlockNestedVault').mockResolvedValue([file]);
+  let resolve!: (value: string) => void;
+  vi.spyOn(native, 'readNestedTextFile').mockReturnValue(new Promise(done => { resolve = done; }));
+  await ready(); await click('Decryption');
+  await input('Vault name', 'Personal'); await input('Vault password', 'correct horse battery staple'); await submit();
+  await click('Vault aaaaaaaa'); await input('Unlock nested vault PIN', '0427'); await submit();
+  await click('protected.txt'); await input('Protected file operation PIN', '0427'); await click('Open text editor');
+  await click('Close details');
+  await act(async () => resolve('late protected plaintext'));
+  expect(host.querySelector('[aria-label="Edit protected file contents"]')).toBeNull();
+  expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Nested file contents"]')?.value).toBe('');
+  expect(host.textContent).not.toContain('Authenticated document opened');
+});
+
+it('does not republish plaintext after the root vault locks', async () => {
+  let resolve!: (value: string) => void;
+  vi.spyOn(native, 'readVaultTextFile').mockReturnValue(new Promise(done => { resolve = done; }));
+  await ready(); await click('Decryption');
+  await input('Vault name', 'Personal'); await input('Vault password', 'correct horse battery staple'); await submit();
+  const edit = host.querySelector<HTMLButtonElement>('[aria-label="Edit private-plan.txt"]')!;
+  await act(async () => edit.click());
+  await click('Lock vault');
+  await act(async () => resolve('late private plaintext'));
+  expect(host.querySelector('[aria-label="File contents"]')).toBeNull();
+  expect(host.textContent).not.toContain('private-plan.txt');
+  expect(host.textContent).toContain('Authenticate to open a vault');
+});
+
+it('keeps late file metadata hidden while native locking is still pending', async () => {
+  let resolveFiles!: (value: { id: string; name: string; sizeBytes: number }[]) => void;
+  let resolveLock!: () => void;
+  await ready(); await click('Decryption');
+  vi.spyOn(native, 'listVaultFiles').mockReturnValue(new Promise(done => { resolveFiles = done; }));
+  await input('Vault name', 'Personal'); await input('Vault password', 'correct horse battery staple'); await submit();
+  vi.spyOn(native, 'lockVault').mockReturnValue(new Promise(done => { resolveLock = done; }));
+  await click('Lock vault');
+  await act(async () => resolveFiles([{ id: 'late-file', name: 'late-secret.txt', sizeBytes: 10 }]));
+  expect(host.textContent).not.toContain('late-secret.txt');
+  expect(host.textContent).toContain('Locking vault');
+  await act(async () => resolveLock());
+  expect(host.textContent).toContain('Authenticate to open a vault');
 });

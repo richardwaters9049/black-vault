@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import TrustedContacts from './TrustedContacts';
-import type { TrustedContact } from '@/lib/native';
+import { native, type TrustedContact } from '@/lib/native';
 
 let root: Root;
 let host: HTMLDivElement;
@@ -55,7 +55,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
-  vi.unstubAllGlobals();
+  vi.unstubAllGlobals(); vi.restoreAllMocks();
 });
 
 async function render() {
@@ -135,4 +135,20 @@ it('keeps revoked contacts visible without a verification action', async () => {
   expect(host.textContent).toContain('Revoked');
   expect(host.textContent).toContain('This contact remains stored but is not trusted.');
   expect(host.querySelector('[aria-label="Verify fingerprint for Alice"]')).toBeNull();
+});
+
+it('keeps contacts available when the OS identity store fails', async () => {
+  contacts = [{ name: 'Alice', fingerprint, trust: 'verified', previousVerifiedFingerprint: null }];
+  vi.spyOn(native, 'getPublicIdentity').mockRejectedValue(new Error('Secure storage unavailable.'));
+  await render();
+  expect(host.textContent).toContain('Alice');
+  expect(host.textContent).toContain('Identity unavailable.');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Secure storage unavailable.');
+});
+it('distinguishes a failed contact read from an empty contact book', async () => {
+  vi.spyOn(native, 'listContacts').mockRejectedValue(new Error('Contact storage unavailable.'));
+  await render();
+  expect(host.textContent).toContain(fingerprint);
+  expect(host.textContent).toContain('Contact list unavailable.');
+  expect(host.textContent).not.toContain('No contacts imported yet.');
 });

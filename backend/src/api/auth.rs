@@ -29,7 +29,7 @@ pub async fn register(
 ) -> Result<(StatusCode, Json<RegisterResponse>), ErrorResponse> {
     let user = register_user(&pool, &payload.email, &payload.password)
         .await
-        .map_err(ErrorResponse::from_service_error)?;
+        .map_err(ErrorResponse::from_auth_error)?;
 
     Ok((
         StatusCode::CREATED,
@@ -59,7 +59,7 @@ pub async fn login(
 ) -> Result<(StatusCode, Json<LoginResponse>), ErrorResponse> {
     let (user, token) = login_user(&pool, &config, &payload.email, &payload.password)
         .await
-        .map_err(ErrorResponse::from_service_error)?;
+        .map_err(ErrorResponse::from_auth_error)?;
 
     Ok((
         StatusCode::OK,

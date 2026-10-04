@@ -43,7 +43,6 @@ pub(super) struct OpenVault {
     pub(super) id: String,
     pub(super) name: Zeroizing<String>,
     // Zeroising is best-effort; host compromise while unlocked is out of scope.
-    #[allow(dead_code)]
     // Retained for encrypted-file operations; never exposed to JavaScript.
     pub(super) master_key: Zeroizing<[u8; MASTER_KEY_LEN]>,
 }

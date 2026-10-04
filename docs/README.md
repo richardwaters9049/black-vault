@@ -10,6 +10,10 @@
 - [Biometric security model](security/BIOMETRIC_SECURITY_MODEL.md)
 - [Desktop development](../desktop/README.md)
 
+## Engineering audits
+
+- [4 October 2026 codebase audit](engineering/CODEBASE_AUDIT_2026-10-04.md) — locking, error handling, cleanup and local verification.
+
 ## Candidate and final sprints
 
 - [v0.2.0 release-candidate notes](release/RELEASE_0.2.0_RC1.md)

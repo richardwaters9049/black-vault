@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useState, type DragEvent } from 'react';
 import { motion, useReducedMotion, type Variants } from 'framer-motion';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { isTauri } from '@tauri-apps/api/core';
@@ -6,6 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import { CheckCircle2, Download, FileLock2, FolderPlus, LockKeyhole, ScanSearch, ShieldCheck, ShieldX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EXAMPLE_DRAG_TYPE, examples, getActiveExampleDrag, getActiveDecryptDrag } from './ExampleFiles';
+import { useOperationScope } from '@/lib/useOperationScope';
 import { errorMessage, formatFileSize, native, type VaultFile } from '@/lib/native';
 
 const VAULT_FILE_DRAG_TYPE = 'application/x-black-vault-encrypted-file';
@@ -22,15 +23,17 @@ const filesItem: Variants = {
   show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } },
 };
 
-export default function VaultFiles({ vaultId, operation, chosenExample, chosenDecrypt, onFilesChange, onDecryptedChange }: {
+export default function VaultFiles({ vaultId, vaultFiles, operation, chosenExample, chosenDecrypt, onFilesChange, onDecryptedChange }: {
   vaultId: string;
+  vaultFiles?: VaultFile[];
   operation?: Mode;
   chosenExample?: { id: string; nonce: number } | null;
   chosenDecrypt?: { id: string; nonce: number } | null;
   onFilesChange?: (files: VaultFile[]) => void;
   onDecryptedChange?: (files: VaultFile[]) => void;
 }) {
-  const [files, setFiles] = useState<VaultFile[]>([]);
+  const [localFiles, setFiles] = useState<VaultFile[]>([]);
+  const files = vaultFiles ?? localFiles;
   const [decryptedFiles, setDecryptedFiles] = useState<VaultFile[]>([]);
   const [mode, setMode] = useState<Mode>(operation ?? 'encrypt');
   const fixedMode = operation !== undefined;
@@ -38,41 +41,50 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
   const [selection, setSelection] = useState<{ mode: Mode; id: string; name: string } | null>(null);
-  const dropZone = useRef<HTMLDivElement>(null);
+  const { start, invalidate } = useOperationScope(vaultId);
   const [phase, setPhase] = useState<Phase>('idle');
   const [status, setStatus] = useState('');
   useEffect(() => {
-    let mounted = true;
+    const isCurrent = start();
     setFiles([]); setDecryptedFiles([]); onDecryptedChange?.([]); setPhase('idle'); setStatus(''); setMode(operation ?? 'encrypt'); setSelection(null);
-    native.listVaultFiles().then(items => { if (mounted) { setFiles(items); onFilesChange?.(items); } })
-      .catch(reason => { if (mounted) { setPhase('error'); setStatus(errorMessage(reason)); } });
-    return () => { mounted = false; };
-  }, [vaultId]);
+    if (vaultFiles !== undefined) return invalidate;
+    native.listVaultFiles().then(items => { if (isCurrent()) { setFiles(items); onFilesChange?.(items); } })
+      .catch(reason => { if (isCurrent()) { setPhase('error'); setStatus(errorMessage(reason)); } });
+    return invalidate;
+  }, [vaultId, operation, start, invalidate]);
 
   useEffect(() => {
-    if (!chosenExample) return;
+    if (!chosenExample || operation === 'decrypt') return;
     const found = examples.find(item => item.id === chosenExample.id);
     if (!found) return;
     setMode('encrypt');
     setSelection({ mode: 'encrypt', id: found.id, name: found.name });
     setPhase('idle');
     setStatus(found.name + ' selected. Press Encrypt to continue.');
-  }, [chosenExample]);
+  }, [chosenExample, operation]);
 
   useEffect(() => {
-    if (!chosenDecrypt) return;
+    if (!chosenDecrypt || operation === 'encrypt') return;
     const file = files.find(item => item.id === chosenDecrypt.id);
     if (!file) return;
     setMode('decrypt');
     setSelection({ mode: 'decrypt', id: file.id, name: file.name });
     setPhase('idle');
     setStatus(file.name + ' selected. Press Decrypt to continue.');
-  }, [chosenDecrypt, files]);
+  }, [chosenDecrypt, files, operation]);
 
-  async function refreshFiles() {
-    const items = await native.listVaultFiles();
-    setFiles(items);
-    onFilesChange?.(items);
+  async function recordImport(imported: VaultFile, isCurrent: () => boolean) {
+    if (!isCurrent()) return '';
+    const next = [...files.filter(file => file.id !== imported.id), imported];
+    setFiles(next); onFilesChange?.(next);
+    try {
+      const items = await native.listVaultFiles();
+      if (isCurrent()) { setFiles(items); onFilesChange?.(items); }
+      return '';
+    } catch (reason) {
+      // Import already committed; retain its metadata and explain only the refresh failure.
+      return ' The file was saved, but the list could not be refreshed. Reopen this workspace to reload it. ' + errorMessage(reason);
+    }
   }
 
   useEffect(() => {
@@ -103,8 +115,8 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
     });
     listen('black-vault-file-drop-multiple', () => {
       if (active && mode === 'encrypt') {
-        setOver(false); setPhase('error');
-        setStatus('Drop one Finder file at a time. The previous selection has not been changed.');
+        setOver(false); setSelection(current => current?.id === 'native-drop' ? null : current); setPhase('error');
+        setStatus('Drop one Finder file at a time. The native file selection was cleared.');
       }
     }).then(fn => { if (active) unlistenMultiple = fn; else fn(); }).catch(reason => {
       console.error('[vault-drop][ui] failed to register multi-drop listener (details withheld)');
@@ -117,7 +129,7 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
         if (event.payload.paths.length === 0) {
           const decryptId = getActiveDecryptDrag();
           const encrypted = files.find(item => item.id === decryptId);
-          if (encrypted) {
+          if (encrypted && operation !== 'encrypt') {
             setMode('decrypt');
             setSelection({ mode: 'decrypt', id: encrypted.id, name: encrypted.name });
             setPhase('idle');
@@ -130,7 +142,7 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
         const id = getActiveExampleDrag();
         if (id && event.payload.paths.length === 0) {
           const sample = examples.find(item => item.id === id);
-          if (sample) {
+          if (sample && operation !== 'decrypt') {
             setMode('encrypt');
             setSelection({ mode: 'encrypt', id, name: sample.name });
             setPhase('idle');
@@ -151,44 +163,45 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
       active = false;
       unlistenDrop?.(); unlistenMultiple?.(); unlistenHover?.();
     };
-  }, [mode, busy, files]);
+  }, [mode, busy, files, operation]);
 
-  async function run(action: () => Promise<string | null>) {
+  async function run(action: (isCurrent: () => boolean) => Promise<string | null>) {
     if (busy) return;
+    const isCurrent = start();
     setBusy(true); setPhase('working'); setStatus(mode === 'encrypt' ? 'Scanning and encrypting into the vault…' : 'Decrypting and verifying in secure memory…');
     try {
-      const message = await action();
+      const message = await action(isCurrent);
+      if (!isCurrent()) return;
       if (message) { setPhase('success'); setStatus(message); }
       else { setPhase('idle'); setStatus('Operation cancelled. No changes made.'); }
-    } catch (reason) { setPhase('error'); setStatus(errorMessage(reason)); }
-    finally { setBusy(false); setOver(false); }
+    } catch (reason) { if (isCurrent()) { setPhase('error'); setStatus(errorMessage(reason)); } }
+    finally { if (isCurrent()) { setBusy(false); setOver(false); } }
   }
   function importFile() {
-    void run(async () => {
+    void run(async isCurrent => {
       const imported = await native.importVaultFile();
       if (!imported) return null;
-      await refreshFiles();
-      return imported.name + ' scanned, encrypted and stored in the vault. The original source remains unchanged.';
+      const warning = await recordImport(imported, isCurrent);
+      return imported.name + ' scanned, encrypted and stored in the vault. The original source remains unchanged.' + warning;
     });
   }
   function importExample(id: string) {
     if (!examples.some(sample => sample.id === id)) return;
-    void run(async () => {
+    void run(async isCurrent => {
       const imported = await native.importExampleFile(id);
-      await refreshFiles();
-      return imported.name + ' scanned, encrypted and stored in your vault.';
+      const warning = await recordImport(imported, isCurrent);
+      return imported.name + ' scanned, encrypted and stored in your vault.' + warning;
     });
   }
   function decryptFile(id: string) {
-    void run(async () => {
+    void run(async isCurrent => {
       const verified = await native.decryptVaultFile(id);
       // Rust verifies authentication in zeroising memory and retains only
       // encrypted bytes on disk. This list is a session-only activity view.
-      setDecryptedFiles(previous => {
-        const next = [...previous.filter(file => file.id !== verified.id), verified];
-        onDecryptedChange?.(next);
-        return next;
-      });
+      if (!isCurrent()) return null;
+      const next = [...decryptedFiles.filter(file => file.id !== verified.id), verified];
+      setDecryptedFiles(next);
+      onDecryptedChange?.(next);
       return verified.name + ' decrypted and verified in memory. No plaintext file was saved. The encrypted original remains in the vault.';
     });
   }
@@ -212,6 +225,9 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
       setPhase('error'); setStatus('Select an Example File in the sidebar, or drop a Finder file into Encryption.'); return;
     }
     const targetMode: Mode = sample ? 'encrypt' : 'decrypt';
+    if (operation && operation !== targetMode) {
+      setPhase('error'); setStatus('Open the ' + (targetMode === 'encrypt' ? 'Encryption' : 'Decryption') + ' workspace for this file.'); return;
+    }
     setMode(targetMode);
     setSelection({ mode: targetMode, id, name: found.name });
     setPhase('idle'); setStatus(found.name + ' selected. Press ' + (targetMode === 'encrypt' ? 'Encrypt' : 'Decrypt') + ' to continue.');
@@ -220,10 +236,10 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
   function confirmSelection() {
     if (!selection || selection.mode !== mode || busy) return;
     if (mode === 'encrypt' && selection.id === 'native-drop') {
-      void run(async () => {
+      void run(async isCurrent => {
         const imported = await native.importDroppedFile();
-        await refreshFiles();
-        return imported.name + ' scanned, encrypted and stored in the vault. The source remains unchanged.';
+        const warning = await recordImport(imported, isCurrent);
+        return imported.name + ' scanned, encrypted and stored in the vault. The source remains unchanged.' + warning;
       });
     } else if (mode === 'encrypt') importExample(selection.id);
     else decryptFile(selection.id);
@@ -243,7 +259,7 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
       </button>)}
     </motion.div>}
     <motion.div variants={filesItem} role={fixedMode ? undefined : 'tabpanel'} className={fixedMode ? '' : 'mt-4'}>
-      <motion.div variants={filesItem} ref={dropZone} onDragOver={dragOver} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(false); }} onDrop={drop}
+      <motion.div variants={filesItem} onDragOver={dragOver} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(false); }} onDrop={drop}
         className={`relative rounded-xl border border-dashed p-5 text-center transition-all duration-200 sm:p-7 ${over ? 'scale-[1.01] border-sky-300 bg-blue-500/15 shadow-[0_0_35px_#3b82f620]' : 'border-blue-400/25 bg-[#0b1422]'}`}>
         <div className={`mx-auto grid size-12 place-items-center rounded-xl border border-blue-400/20 bg-blue-400/10 text-blue-300 ${phase === 'working' ? 'bv-operation-working' : ''}`}>
           {phase === 'success' ? <CheckCircle2 size={23} className="text-emerald-300" /> : phase === 'error' ? <ShieldX size={23} className="text-red-300" /> : mode === 'encrypt' ? <ScanSearch size={23} /> : <Download size={23} />}
@@ -251,7 +267,7 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
         <h4 className="mt-4 text-sm font-medium">{over ? selection ? 'Drop to replace selected file' : 'Drop to select file' : selection?.mode === mode ? 'File ready for ' + (mode === 'encrypt' ? 'encryption' : 'decryption') : mode === 'encrypt' ? 'Drop a file to encrypt' : 'Drop an encrypted vault file'}</h4>
         <p className="mx-auto mt-2 max-w-xs text-[11px] leading-5 text-slate-400">{mode === 'encrypt'
           ? selection ? 'Drop a different file anywhere over this area to replace the selected file. Nothing is encrypted until you press Encrypt.' : 'Drag a Finder file or an Example File here. Maximum 5 MiB. You can change your selection before encrypting.'
-          : selection ? 'Drop another encrypted vault file to replace this selection, then press Decrypt.' : 'Drag a stored file from below, then press Decrypt to choose an export destination.'}</p>
+          : selection ? 'Drop another encrypted vault file to replace this selection, then press Decrypt.' : 'Drag a stored file from below, then press Decrypt to verify it in memory.'}</p>
         {selection?.mode === mode && <div className={"mx-auto mt-4 flex max-w-sm items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors " + (over ? "border-sky-300 bg-sky-400/25" : "border-sky-400/30 bg-sky-400/10")}>
           <div className="flex min-w-0 items-center gap-2"><FileLock2 size={17} className="shrink-0 text-sky-300" /><span className="min-w-0 break-all text-xs text-sky-100">{selection.name}</span></div>
           <button type="button" disabled={busy} onClick={() => { setSelection(null); setStatus('Selection cleared.'); }} className="shrink-0 text-xs text-slate-400 hover:text-white">Remove</button>

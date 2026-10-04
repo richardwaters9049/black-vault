@@ -1,6 +1,6 @@
 # Black Vault API
 
-A secure Rust-based backend API for the Black Vault sensitive-file encryption platform.
+**Preserved legacy/reference API.** The active product is the offline [desktop application](../desktop/README.md); it does not require this API or PostgreSQL. See the [legacy boundary](../legacy/README.md).
 
 ## Features
 
@@ -8,7 +8,7 @@ A secure Rust-based backend API for the Black Vault sensitive-file encryption pl
 - **Protected Routes**: JWT-based authentication middleware
 - **Input Validation**: Email format validation and strong password requirements
 - **PostgreSQL Integration**: SQLx with type-safe database queries
-- **CORS Support**: Configurable cross-origin resource sharing
+- **CORS Support**: Permissive legacy development configuration; do not expose this stack as a production service
 - **Structured Logging**: Tracing integration for observability
 - **Health Checks**: Endpoint for monitoring service status
 
@@ -23,7 +23,7 @@ A secure Rust-based backend API for the Black Vault sensitive-file encryption pl
 
 ## Prerequisites
 
-- Rust 1.70+
+- Current stable Rust (the desktop development baseline is Rust 1.90+)
 - PostgreSQL 14+
 - Cargo
 
@@ -213,3 +213,17 @@ src/
 ## License
 
 Proprietary - Black Vault Engineering
+
+## Maintenance checks
+
+```bash
+cargo fmt --all -- --check
+SQLX_OFFLINE=true cargo clippy --locked --all-targets -- -D warnings
+# DATABASE_URL must point to a migrated disposable PostgreSQL database.
+SQLX_OFFLINE=true cargo test --locked
+cargo audit
+```
+
+Production SQLx query metadata remains checked in. Database tests use runtime parameterised queries so the offline all-target build does not need cached test cleanup metadata. JWTs explicitly use HS256 with checked expiration arithmetic and the AWS-LC provider; HTTP authentication errors use typed variants instead of comparing message text.
+
+See the [4 October audit](../docs/engineering/CODEBASE_AUDIT_2026-10-04.md), including the inactive MySQL/RSA lockfile advisory. Docker development ports bind to loopback.

@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: black_vault_dev
 
     ports:
-      - "${POSTGRES_PORT:-0}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-0}:5432"
 
     volumes:
       - black-vault-postgres:/var/lib/postgresql/data
@@ -41,7 +41,7 @@ services:
       DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-BlackVaultDev123!}
 
     ports:
-      - "${BACKEND_PORT:-8080}:8080"
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
 
     depends_on:
       postgres:
@@ -67,7 +67,7 @@ services:
       WATCHPACK_POLLING: "true"
 
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
 
     volumes:
       - ./frontend:/app

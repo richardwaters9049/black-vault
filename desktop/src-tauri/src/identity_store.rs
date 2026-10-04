@@ -1,5 +1,3 @@
-#![allow(dead_code)] // Phase B remains Rust-only until the identity security gate passes.
-
 //! Persistent transfer identity storage.
 //!
 //! Private identity bytes are kept behind this Rust-only abstraction. The
@@ -21,12 +19,15 @@ pub(crate) enum IdentityStoreError {
     Corrupt,
     StorageFailure,
     CryptoFailure,
+    // Identity rotation remains a tested foundation without a user-facing command.
+    #[cfg_attr(not(test), allow(dead_code))]
     ConfirmationRequired,
 }
 
 pub(crate) trait SecretStore {
     fn get(&self) -> Result<Zeroizing<Vec<u8>>, IdentityStoreError>;
     fn set(&self, secret: &[u8]) -> Result<(), IdentityStoreError>;
+    #[cfg_attr(not(test), allow(dead_code))]
     fn delete(&self) -> Result<(), IdentityStoreError>;
 }
 
@@ -68,6 +69,7 @@ impl<S: SecretStore> IdentityManager<S> {
     ///
     /// Callers must require an explicit user confirmation because contacts
     /// must independently verify the new fingerprint after this succeeds.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn rotate_after_confirmation(
         &self,
         confirmed: bool,
@@ -82,6 +84,7 @@ impl<S: SecretStore> IdentityManager<S> {
         Ok(identity.public_identity())
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn delete(&self) -> Result<(), IdentityStoreError> {
         self.store.delete()
     }

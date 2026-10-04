@@ -39,7 +39,6 @@ export interface TrustedContact {
 interface Commands {
   get_biometric_status: BiometricStatus;
   get_desktop_info: DesktopInfo;
-  select_file: SelectedFile | null;
   list_vaults: VaultSummary[];
   create_vault: VaultSummary;
   unlock_vault: VaultSummary;
@@ -78,7 +77,6 @@ function call<K extends keyof Commands>(command: K, args?: Record<string, unknow
 export const native = {
   getBiometricStatus: () => call('get_biometric_status'),
   getDesktopInfo: () => call('get_desktop_info'),
-  selectFile: () => call('select_file'),
   listVaults: () => call('list_vaults'),
   createVault: (name: string, password: string) => call('create_vault', { name, password }),
   unlockVault: (vaultId: string, password: string) => call('unlock_vault', { vaultId, password }),
@@ -111,12 +109,11 @@ export const native = {
 };
 
 export function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string' && error.trim()) return error;
-  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-  return 'The native operation could not be completed. Please try again.';
+  const message = error instanceof Error ? error.message
+    : typeof error === 'string' ? error
+    : typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string' ? error.message
+    : '';
+  return message.trim() || 'The native operation could not be completed. Please try again.';
 }
 
 export function formatFileSize(bytes: number): string {

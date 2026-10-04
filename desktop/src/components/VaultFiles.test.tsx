@@ -2,6 +2,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
+import { native } from '@/lib/native';
 import VaultFiles from './VaultFiles';
 
 const eventState = vi.hoisted(() => ({
@@ -43,7 +44,7 @@ beforeEach(async () => {
   root = createRoot(host);
   await act(async () => root.render(<VaultFiles vaultId="vault-id" />));
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 async function click(label: string) {
   const button = Array.from(host.querySelectorAll('button')).find(item => item.textContent?.includes(label));
   if (!button) throw new Error('Missing button: ' + label);
@@ -121,4 +122,49 @@ it('surfaces native listener registration failures without logging sensitive det
   expect(host.textContent).toContain('listener unavailable');
   expect(error).toHaveBeenCalledWith('[vault-drop][ui] failed to register multi-drop listener (details withheld)');
   error.mockRestore();
+});
+
+it('reports a committed import separately from a failed list refresh', async () => {
+  vi.spyOn(native, 'listVaultFiles').mockRejectedValue(new Error('storage unavailable'));
+  await click('Choose file to encrypt');
+  expect(host.textContent).toContain('secret.txt');
+  expect(host.textContent).toContain('The file was saved, but the list could not be refreshed');
+  expect(host.textContent).toContain('encrypted and stored');
+});
+it('clears a native selection when a multi-file drop invalidates it', async () => {
+  await act(async () => { await eventState.callbacks.get('black-vault-file-staged')!(); });
+  expect(host.textContent).toContain('finder-file.txt');
+  await act(async () => { await eventState.callbacks.get('black-vault-file-drop-multiple')!(); });
+  expect(host.textContent).not.toContain('finder-file.txt');
+  expect(host.textContent).toContain('native file selection was cleared');
+});
+it('keeps a dedicated Decryption workspace from staging an encryption example', async () => {
+  await act(async () => root.render(<VaultFiles operation="decrypt" vaultId="vault-id" chosenExample={{ id: 'notes', nonce: 1 }}/>));
+  expect(host.querySelector('[aria-label="File decryption"]')).not.toBeNull();
+  expect(host.textContent).not.toContain('example-notes.txt selected');
+  expect(host.textContent).not.toContain('export destination');
+});
+it('does not update the parent from an import that returns after unmount', async () => {
+  let resolve!: (value: { id: string; name: string; sizeBytes: number }) => void;
+  vi.spyOn(native, 'importVaultFile').mockReturnValue(new Promise(done => { resolve = done; }));
+  const onFilesChange = vi.fn();
+  await act(async () => root.render(<VaultFiles vaultId="vault-id" onFilesChange={onFilesChange}/>));
+  onFilesChange.mockClear();
+  await click('Choose file to encrypt');
+  await act(async () => root.render(<></>));
+  await act(async () => resolve({ id, name: 'late.txt', sizeBytes: 3 }));
+  expect(onFilesChange).not.toHaveBeenCalled();
+});
+
+it('rejects an HTML example drop in a dedicated Decryption workspace', async () => {
+  await act(async () => root.render(<VaultFiles operation="decrypt" vaultId="vault-id"/>));
+  const target = host.querySelector('[aria-label="File decryption"] > div > div')!;
+  await act(async () => {
+    const event = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'dataTransfer', { value: { getData: (type: string) => type === 'text/plain' ? 'black-vault-example:notes' : '' } });
+    target.dispatchEvent(event);
+  });
+  expect(host.textContent).toContain('Open the Encryption workspace');
+  expect(host.querySelector('[aria-label="File decryption"]')).not.toBeNull();
+  expect(calls).not.toContain('import_example_file');
 });

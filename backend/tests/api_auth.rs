@@ -86,7 +86,8 @@ fn test_token(user_id: Uuid) -> String {
 }
 
 async fn cleanup_user(pool: &PgPool, user_id: Uuid) {
-    sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
         .execute(pool)
         .await
         .expect("Failed to clean up test user");

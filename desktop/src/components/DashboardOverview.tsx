@@ -32,17 +32,20 @@ export default function DashboardOverview({
   const [vaults, setVaults] = useState<VaultSummary[]>([]);
   const [contacts, setContacts] = useState<TrustedContact[]>([]);
   const [error, setError] = useState('');
+  const [vaultState, setVaultState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [contactState, setContactState] = useState<'loading' | 'ready' | 'error'>('loading');
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     let active = true;
-    Promise.all([native.listVaults(), native.listContacts()])
-      .then(([localVaults, savedContacts]) => {
-        if (!active) return;
-        setVaults(localVaults);
-        setContacts(savedContacts);
-      })
-      .catch(reason => { if (active) setError(errorMessage(reason)); });
+    setError(''); setVaultState('loading'); setContactState('loading');
+    // Independent reads keep a contact-store failure from hiding available vaults.
+    native.listVaults().then(items => {
+      if (active) { setVaults(items); setVaultState('ready'); }
+    }).catch(reason => { if (active) { setVaultState('error'); setError(current => [current, errorMessage(reason)].filter(Boolean).join(' ')); } });
+    native.listContacts().then(items => {
+      if (active) { setContacts(items); setContactState('ready'); }
+    }).catch(reason => { if (active) { setContactState('error'); setError(current => [current, errorMessage(reason)].filter(Boolean).join(' ')); } });
     return () => { active = false; };
   }, [currentVault?.id]);
 
@@ -66,7 +69,7 @@ export default function DashboardOverview({
 
     {error && <motion.p variants={overviewItem} role="alert" className="mt-5 rounded-lg border border-red-400/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200">{error}</motion.p>}
 
-    {vaults.length === 0 && <motion.section variants={overviewItem} className="bv-empty-vault mt-7 overflow-hidden rounded-2xl border border-blue-400/15 bg-card">
+    {vaultState === 'ready' && vaults.length === 0 && <motion.section variants={overviewItem} className="bv-empty-vault mt-7 overflow-hidden rounded-2xl border border-blue-400/15 bg-card">
       <motion.div variants={cardContainer} className="grid items-center gap-4 lg:grid-cols-[1.08fr_.92fr]">
         <motion.div variants={overviewItem} className="px-6 pb-2 pt-7 sm:px-8 lg:py-9">
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-sky-400">Your encrypted world</p>
@@ -107,7 +110,7 @@ export default function DashboardOverview({
     <motion.div variants={cardContainer} className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <motion.div variants={overviewItem} className="rounded-xl border border-border bg-card p-5">
         <KeyRound size={17} className="text-blue-300"/>
-        <p className="mt-4 text-2xl font-medium">{vaults.length}</p>
+        <p className="mt-4 text-2xl font-medium">{vaultState === 'ready' ? vaults.length : '—'}</p>
         <p className="mt-1 text-[11px] text-slate-500">Local vault{vaults.length === 1 ? '' : 's'}</p>
       </motion.div>
       <motion.div variants={overviewItem} className="rounded-xl border border-border bg-card p-5">
@@ -117,12 +120,12 @@ export default function DashboardOverview({
       </motion.div>
       <motion.div variants={overviewItem} className="rounded-xl border border-border bg-card p-5">
         <ShieldCheck size={17} className="text-emerald-300"/>
-        <p className="mt-4 text-2xl font-medium">{verified}</p>
+        <p className="mt-4 text-2xl font-medium">{contactState === 'ready' ? verified : '—'}</p>
         <p className="mt-1 text-[11px] text-slate-500">Verified contact{verified === 1 ? '' : 's'}</p>
       </motion.div>
       <motion.div variants={overviewItem} className="rounded-xl border border-border bg-card p-5">
         <ShieldQuestion size={17} className={changed ? 'text-red-300' : 'text-slate-500'}/>
-        <p className="mt-4 text-2xl font-medium">{changed}</p>
+        <p className="mt-4 text-2xl font-medium">{contactState === 'ready' ? changed : '—'}</p>
         <p className="mt-1 text-[11px] text-slate-500">Contact key change{changed === 1 ? '' : 's'} requiring review</p>
       </motion.div>
     </motion.div>
@@ -132,7 +135,8 @@ export default function DashboardOverview({
         <div className="flex items-center gap-2"><KeyRound size={15} className="text-blue-300"/><h2 className="text-sm font-medium">Vault snapshot</h2></div>
         <p className="mt-2 text-[11px] leading-5 text-slate-500">Vault creation timestamps are not currently persisted, so this list does not claim chronological recency.</p>
         <div className="mt-4 space-y-2">
-          {vaults.slice(0, 5).map(vault => <div key={vault.id} className="flex items-center gap-3 rounded-lg border border-border bg-black/15 p-3">
+          {vaultState !== 'ready' && <p className="py-5 text-xs text-slate-500">{vaultState === 'loading' ? 'Loading vaults…' : 'Vault list unavailable.'}</p>}
+          {(vaultState === 'ready' ? vaults : []).slice(0, 5).map(vault => <div key={vault.id} className="flex items-center gap-3 rounded-lg border border-border bg-black/15 p-3">
             {vault.isLocked ? <Lock size={14} className="text-slate-500"/> : <LockOpen size={14} className="text-emerald-300"/>}
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs text-slate-200">{vault.name ?? 'Locked vault'}</p>
@@ -140,7 +144,7 @@ export default function DashboardOverview({
             </div>
             <span className="text-[10px] text-slate-500">{vault.isLocked ? 'Locked' : 'Open'}</span>
           </div>)}
-          {vaults.length === 0 && <p className="py-5 text-xs text-slate-500">No local vaults found.</p>}
+          {vaultState === 'ready' && vaults.length === 0 && <p className="py-5 text-xs text-slate-500">No local vaults found.</p>}
         </div>
       </motion.section>
 
@@ -148,12 +152,13 @@ export default function DashboardOverview({
         <div className="flex items-center gap-2"><ContactRound size={15} className="text-blue-300"/><h2 className="text-sm font-medium">Contact snapshot</h2></div>
         <p className="mt-2 text-[11px] leading-5 text-slate-500">Contact-added timestamps are not currently persisted. Trust state below is current, not a fabricated activity history.</p>
         <div className="mt-4 space-y-2">
-          {contacts.slice(0, 5).map(contact => <div key={contact.name} className="flex items-center gap-3 rounded-lg border border-border bg-black/15 p-3">
+          {contactState !== 'ready' && <p className="py-5 text-xs text-slate-500">{contactState === 'loading' ? 'Loading contacts…' : 'Contact list unavailable.'}</p>}
+          {(contactState === 'ready' ? contacts : []).slice(0, 5).map(contact => <div key={contact.name} className="flex items-center gap-3 rounded-lg border border-border bg-black/15 p-3">
             <ContactRound size={14} className={contact.trust === 'verified' ? 'text-emerald-300' : contact.trust === 'key_changed' ? 'text-red-300' : 'text-slate-500'}/>
             <p className="min-w-0 flex-1 truncate text-xs text-slate-200">{contact.name}</p>
             <span className="font-mono text-[10px] uppercase text-slate-500">{contact.trust.replace('_', ' ')}</span>
           </div>)}
-          {contacts.length === 0 && <p className="py-5 text-xs text-slate-500">No contacts imported yet.</p>}
+          {contactState === 'ready' && contacts.length === 0 && <p className="py-5 text-xs text-slate-500">No contacts imported yet.</p>}
         </div>
       </motion.section>
     </motion.div>

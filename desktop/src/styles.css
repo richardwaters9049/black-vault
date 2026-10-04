@@ -44,8 +44,6 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 ::selection { background: #274779; }
 
-
-
 /* Final UI/UX sprint: depth, hierarchy and tactile desktop affordances. */
 .bv-dashboard-shell {
   min-height: 100vh;
@@ -125,14 +123,12 @@ button:not(:disabled):active {
 .bv-orbit-one { animation: bv-spin 9s linear infinite; }
 .bv-orbit-two { animation: bv-spin 14s linear infinite reverse; }
 .bv-orbit-blip { transform-origin: 0 80px; animation: bv-orbit 3s linear infinite; }
-.vault-reveal { animation: vault-appear .65s .35s both; }
-.vault-progress { animation: vault-load 2.7s cubic-bezier(.22,.7,.2,1) both; transform-origin: left; }
 @keyframes bv-draw { to { stroke-dashoffset: 0; } }
 @keyframes bv-vault-spin { from { transform: rotate(-360deg); } to { transform: rotate(0deg); } }
 @keyframes bv-spin { to { transform: rotate(360deg); } }
 @keyframes bv-orbit { to { transform: rotate(360deg); } }
 @keyframes vault-appear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes vault-load { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
 @media (prefers-reduced-motion: reduce) {
   .bv-mark-animated, .bv-mark-animated *, .bv-logo-stage, .bv-orbit, .bv-orbit-blip, .vault-reveal, .vault-progress { animation: none !important; }
   .bv-mark-animated .bv-mark-shell, .bv-mark-animated .bv-mark-top, .bv-mark-animated .bv-mark-core, .bv-mark-animated .bv-mark-v { stroke-dashoffset: 0; }
@@ -147,7 +143,6 @@ button:not(:disabled):active {
 @keyframes bv-operation-confirm { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .bv-operation-working, .bv-operation-progress, .bv-operation-confirm { animation: none !important; } }
 
-
 /* Page-level motion is owned by Framer Motion in App.tsx. */
 .bv-premium-enter,
 .bv-page-enter {
@@ -158,127 +153,16 @@ button:focus-visible, input:focus-visible { outline: 2px solid #60a5fa; outline-
 @media (prefers-reduced-motion: reduce) {
   button, input { transition: none !important; }
 }
-
-/* Desktop authentication: a quiet, slowly rotating wireframe globe behind the form. */
-.bv-auth {
-  height: 100vh;
-  height: 100dvh;
-  min-height: 0;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-  background: radial-gradient(ellipse at 50% 52%, #102038 0%, #090f19 52%, #070b12 100%);
-}
-.bv-auth-panel {
-  justify-self: center;
-  align-self: center;
-  width: min(100%, 460px);
-  min-width: 0;
-  max-height: calc(100vh - 32px);
-  max-height: calc(100dvh - 32px);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: clamp(16px, 3.8dvh, 44px) clamp(18px, 3.5vw, 40px);
-  scrollbar-width: thin;
-  scrollbar-color: #334968 transparent;
-}
-.bv-auth-exit { height: 100vh; height: 100dvh; overflow: hidden; }
-
-.bv-auth-ambient {
-  background: radial-gradient(ellipse at 50% 49%, #315b9b22, transparent 53%),
-    radial-gradient(ellipse at 50% 106%, #1d4ed826, transparent 42%);
-}
-.bv-auth-stars {
-  opacity: .56;
-  background-image:
-    radial-gradient(circle, #93c5fd8c .75px, transparent 1.3px),
-    radial-gradient(circle, #60a5fa64 .65px, transparent 1.2px),
-    radial-gradient(circle, #c4b5fd65 .65px, transparent 1.3px);
-  background-size: 137px 163px, 211px 193px, 293px 251px;
-  background-position: 18px 25px, 91px 69px, 145px 110px;
-  mask-image: radial-gradient(ellipse at center, transparent 24%, black 95%);
-}
-.bv-auth-horizon {
-  height: 30%;
-  background: radial-gradient(ellipse at 50% 105%, #2563eb20, transparent 65%),
-    linear-gradient(to top, #03060b80, transparent);
-}
-.bv-auth-panel { box-shadow: 0 30px 110px #000b, inset 0 1px #ffffff08; }
 .bv-auth-panel .bv-mark-large { width: 48px; height: 48px; filter: drop-shadow(0 0 12px #3b82f655); }
-.bv-globe-scene { width: min(92vw, 86dvh, 790px); aspect-ratio: 1; transform: translate(-50%, -50%); opacity: .9; }
 
-.bv-globe-orbit { position: absolute; inset: 17% -4%; border: 1px solid #60a5fa35; border-radius: 50%; transform: rotate(-23deg); box-shadow: 0 0 13px #3b82f60b; }
-.bv-globe-orbit-two { transform: rotate(32deg); border-color: #60a5fa24; }
-.bv-globe-orbit-three { inset: 9% 7%; transform: rotate(71deg); border-style: dashed; border-color: #93c5fd19; }
-.bv-orbit-point { position: absolute; z-index: 1; width: 4px; height: 4px; border-radius: 50%; background: #bfdbfe; box-shadow: 0 0 5px 2px #60a5fa7a, 0 0 19px #3b82f699; }
-.bv-orbit-point-one { left: 10%; top: 31%; }
-.bv-orbit-point-two { right: 9%; top: 57%; width: 3px; height: 3px; }
-.bv-orbit-point-three { left: 33%; bottom: 9%; width: 3px; height: 3px; }
-@media (max-width: 640px) { .bv-globe-scene { width: min(115vw, 86dvh); opacity: .34; } }
-@media (max-height: 690px) {
-  .bv-auth { padding-block: 12px; }
-  .bv-auth-panel { max-height: calc(100dvh - 24px); padding-block: 16px; }
-  .bv-auth-panel > div:first-child { margin-bottom: 16px; }
-  .bv-auth-panel > div:first-child > div:first-child { margin-bottom: 10px; width: 54px; height: 54px; }
-  .bv-auth-panel form { margin-top: 14px; }
-  .bv-auth-panel > p:last-child { margin-top: 14px; padding-top: 12px; }
-}
-@media (max-width: 390px) {
-  .bv-auth { padding-inline: 10px; }
-  .bv-auth-panel { padding-inline: 16px; border-radius: 16px; }
-  .bv-auth-panel > div:first-child { margin-bottom: 18px; }
-  .bv-auth-panel > div:first-child > div:first-child { margin-bottom: 12px; }
-}
-@keyframes bv-auth-panel-enter {
-  from { opacity: 0; transform: translateY(19px) scale(.985); filter: blur(3px); }
-  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-}
-@keyframes bv-globe-enter {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(.75) rotate(-25deg); filter: blur(9px); }
-  to { opacity: .9; transform: translate(-50%, -50%) scale(1) rotate(0); filter: blur(0); }
-}
-.bv-globe-enter { animation: bv-globe-enter 1.45s cubic-bezier(.18,.8,.2,1) both; }
-.bv-auth-panel-enter { animation: bv-auth-panel-enter .72s .96s cubic-bezier(.22,1,.36,1) both; }
-@media (prefers-reduced-motion: reduce) { .bv-auth-panel-enter, .bv-globe-enter { animation: none; } }
-
-/* Empty-vault dashboard: reuse the globe as a quiet visual model of local vault creation. */
+/* Background for the first-vault prompt. */
 .bv-empty-vault {
   background:
     radial-gradient(circle at 78% 48%, #1d4ed817, transparent 34%),
     linear-gradient(135deg, #0e141e, #0a111c);
 }
-.bv-vault-seed {
-  position: absolute;
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid #60a5fa42;
-  border-radius: 8px;
-  color: #bfdbfe;
-  background: #0a1625d9;
-  box-shadow: 0 0 20px #2563eb3d, inset 0 1px #ffffff0d;
-  backdrop-filter: blur(6px);
-  animation: bv-vault-seed 3.8s ease-in-out infinite;
-}
-.bv-vault-seed-one { left: 9%; top: 31%; animation-delay: -.5s; }
-.bv-vault-seed-two { right: 8%; top: 22%; animation-delay: -1.6s; }
-.bv-vault-seed-three { right: 10%; bottom: 25%; animation-delay: -2.7s; }
-.bv-vault-seed-four { left: 17%; bottom: 17%; animation-delay: -3.3s; }
-@keyframes bv-vault-seed {
-  0%, 100% { opacity: .45; transform: translateY(3px) scale(.92); box-shadow: 0 0 10px #2563eb22; }
-  45% { opacity: 1; transform: translateY(-3px) scale(1); box-shadow: 0 0 24px #3b82f659; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .bv-vault-seed { animation: none; opacity: .85; }
-}
 
-
-
-
-
-
-/* Dashboard vault hero: a restrained secure-container visual, not a literal bank safe. */
+/* Shared background and status badges for the vault hero. */
 .bv-vault-hero {
   isolation: isolate;
 }
@@ -295,181 +179,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid #60a5fa; outline-
     linear-gradient(90deg, #60a5fa12 1px, transparent 1px);
   background-size: 24px 24px;
   mask-image: radial-gradient(circle at center, black 24%, transparent 72%);
-}
-.bv-vault-shell {
-  width: 58%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%) perspective(900px) rotateX(2deg) rotateY(-5deg);
-  animation: bv-vault-shell-enter .9s cubic-bezier(.22,1,.36,1) both, bv-vault-shell-float 4.8s 1s ease-in-out infinite;
-}
-.bv-vault-backplate {
-  border: 1px solid #60a5fa38;
-  border-radius: 24px;
-  background:
-    linear-gradient(145deg, #182335, #09111d 58%, #050a12);
-  box-shadow:
-    0 28px 70px #0009,
-    0 0 45px #2563eb24,
-    inset 0 1px #ffffff12,
-    inset 0 -18px 32px #0008;
-}
-.bv-vault-backplate::before,
-.bv-vault-backplate::after {
-  content: "";
-  position: absolute;
-  inset: 5%;
-  border: 1px solid #93c5fd17;
-  border-radius: 19px;
-  pointer-events: none;
-}
-.bv-vault-backplate::after {
-  inset: 10%;
-  border-style: dashed;
-  border-color: #60a5fa0f;
-}
-.bv-vault-door {
-  border: 1px solid #7dd3fc47;
-  border-radius: 18px;
-  background:
-    linear-gradient(145deg, #121d2c, #07101b 72%);
-  box-shadow:
-    0 0 30px #3b82f61a,
-    inset 0 1px #ffffff12,
-    inset 0 0 30px #000a;
-}
-.bv-vault-door-inset {
-  border: 1px solid #60a5fa1f;
-  border-radius: 13px;
-  box-shadow: inset 0 0 28px #02050a;
-}
-.bv-vault-lock {
-  width: 47%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-}
-.bv-vault-lock-ring {
-  border: 1px solid #7dd3fc5c;
-  border-radius: 50%;
-  box-shadow: 0 0 20px #38bdf82b, inset 0 0 14px #2563eb24;
-  animation: bv-vault-lock-turn 12s linear infinite;
-}
-.bv-vault-lock-ring::before,
-.bv-vault-lock-ring::after {
-  content: "";
-  position: absolute;
-  background: #93c5fd7a;
-  box-shadow: 0 0 8px #60a5fa80;
-}
-.bv-vault-lock-ring::before {
-  left: 50%;
-  top: -2px;
-  width: 1px;
-  height: 7px;
-}
-.bv-vault-lock-ring::after {
-  top: 50%;
-  right: -2px;
-  width: 7px;
-  height: 1px;
-}
-.bv-vault-lock-ring-inner {
-  border-color: #3b82f638;
-  animation-duration: 8s;
-  animation-direction: reverse;
-}
-.bv-vault-lock-core {
-  display: grid;
-  place-items: center;
-  border: 1px solid #7dd3fc42;
-  border-radius: 50%;
-  color: #bfdbfe;
-  background: radial-gradient(circle, #1d4ed82e, #07101c 65%);
-  box-shadow: 0 0 22px #2563eb3d, inset 0 0 14px #60a5fa12;
-  animation: bv-vault-core 2.6s ease-in-out infinite alternate;
-}
-.bv-vault-lock-spoke {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 44%;
-  height: 1px;
-  transform-origin: left center;
-  background: linear-gradient(90deg, #93c5fd82, transparent);
-}
-.bv-vault-lock-spoke-a { transform: rotate(0deg); }
-.bv-vault-lock-spoke-b { transform: rotate(120deg); }
-.bv-vault-lock-spoke-c { transform: rotate(240deg); }
-
-.bv-vault-bolt {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border: 1px solid #7dd3fc4a;
-  border-radius: 50%;
-  background: #0b1625;
-  box-shadow: 0 0 8px #3b82f638;
-}
-.bv-vault-bolt-tl { left: 7%; top: 7%; }
-.bv-vault-bolt-tr { right: 7%; top: 7%; }
-.bv-vault-bolt-bl { left: 7%; bottom: 7%; }
-.bv-vault-bolt-br { right: 7%; bottom: 7%; }
-
-.bv-vault-scan {
-  overflow: hidden;
-  border-radius: 18px;
-  pointer-events: none;
-}
-.bv-vault-scan::after {
-  content: "";
-  position: absolute;
-  left: 8%;
-  right: 8%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, #7dd3fcbd, transparent);
-  box-shadow: 0 0 15px #38bdf880;
-  animation: bv-vault-scan 3.6s ease-in-out infinite;
-}
-.bv-vault-edge {
-  position: absolute;
-  pointer-events: none;
-}
-.bv-vault-edge-top {
-  left: 12%;
-  right: 12%;
-  top: 7%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, #7dd3fc70, transparent);
-}
-.bv-vault-edge-right {
-  top: 14%;
-  bottom: 14%;
-  right: 6%;
-  width: 1px;
-  background: linear-gradient(180deg, transparent, #3b82f65c, transparent);
-}
-
-.bv-vault-orbit {
-  border: 1px solid #60a5fa20;
-  border-radius: 50%;
-  transform: rotate(-17deg);
-  animation: bv-vault-orbit 15s linear infinite;
-}
-.bv-vault-orbit-b {
-  transform: rotate(36deg);
-  border-style: dashed;
-  border-color: #93c5fd17;
-  animation-duration: 21s;
-  animation-direction: reverse;
-}
-.bv-vault-orbit-node {
-  position: absolute;
-  left: 50%;
-  top: -3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #bfdbfe;
-  box-shadow: 0 0 8px 2px #60a5fa75;
 }
 
 .bv-vault-status {
@@ -495,19 +204,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid #60a5fa; outline-
   box-shadow: 0 0 8px #34d39990;
 }
 
-@keyframes bv-vault-shell-enter {
-  from { opacity: 0; transform: translate(-50%, -50%) perspective(900px) rotateX(8deg) rotateY(-18deg) scale(.84); }
-  to { opacity: 1; transform: translate(-50%, -50%) perspective(900px) rotateX(2deg) rotateY(-5deg) scale(1); }
-}
-@keyframes bv-vault-shell-float {
-  0%, 100% { transform: translate(-50%, -50%) perspective(900px) rotateX(2deg) rotateY(-5deg) translateY(0); }
-  50% { transform: translate(-50%, -50%) perspective(900px) rotateX(1deg) rotateY(-3deg) translateY(-5px); }
-}
-@keyframes bv-vault-lock-turn { to { transform: rotate(360deg); } }
-@keyframes bv-vault-core {
-  from { box-shadow: 0 0 14px #2563eb26, inset 0 0 12px #60a5fa10; }
-  to { box-shadow: 0 0 28px #38bdf84d, inset 0 0 18px #60a5fa1a; }
-}
 @keyframes bv-vault-scan {
   0%, 12% { top: 9%; opacity: 0; }
   22% { opacity: .9; }
@@ -529,7 +225,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid #60a5fa; outline-
     animation: none !important;
   }
 }
-
 
 /* Futuristic bank-vault hero: heavy circular mechanics with Black Vault branding. */
 .bv-bank-vault {
@@ -688,16 +383,4 @@ button:focus-visible, input:focus-visible { outline: 2px solid #60a5fa; outline-
   .vault-splash, .bv-logo-copy, .bv-dialog-enter {
     animation: none !important;
   }
-}
-
-/* Authenticated-only transition: globe and form recede, then the workspace
-   resolves into focus. The auth view stays mounted until native unlock succeeds. */
-@keyframes bv-auth-exit {
-  0% { opacity: 1; transform: scale(1); filter: blur(0); }
-  55% { opacity: .8; transform: scale(1.025); filter: blur(1px); }
-  100% { opacity: 0; transform: scale(1.075); filter: blur(12px); }
-}
-.bv-auth-exit { pointer-events: none; animation: bv-auth-exit .6s cubic-bezier(.5,0,.8,.2) both; }
-@media (prefers-reduced-motion: reduce) {
-  .bv-auth-exit { animation: none; }
 }

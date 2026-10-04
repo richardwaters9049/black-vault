@@ -5,7 +5,6 @@ import {
   AuthResponse,
   RegisterRequest,
   LoginRequest,
-  ApiError as ApiErrorType,
   SetupVaultRequest,
   SetupVaultResponse,
   GetVaultKeyResponse,
@@ -21,20 +20,31 @@ export class ApiError extends Error {
   }
 }
 
+async function request(...args: Parameters<typeof fetch>): Promise<Response> {
+  try { return await fetch(...args); }
+  catch (error) {
+    throw new ApiError(error instanceof Error && error.name === 'AbortError'
+      ? 'Request cancelled.' : 'Could not reach the server. Please try again.');
+  }
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get("content-type");
   const isJson = contentType?.includes("application/json") ?? false;
 
   if (!response.ok) {
+    let message = 'Request failed';
     if (isJson) {
-      const errorData = (await response.json()) as Partial<ApiErrorType>;
-      throw new ApiError(
-        errorData.error ?? "Request failed",
-        response.status,
-      );
+      // Preserve the HTTP failure even when a proxy returns malformed JSON.
+      try {
+        const data: unknown = await response.json();
+        if (typeof data === 'object' && data !== null && 'error' in data
+          && typeof data.error === 'string' && data.error.trim()) {
+          message = data.error.slice(0, 512);
+        }
+      } catch { /* Fall back to the bounded HTTP error. */ }
     }
-
-    throw new ApiError("Request failed", response.status);
+    throw new ApiError(message, response.status);
   }
 
   if (response.status === 204) {
@@ -45,33 +55,34 @@ async function handleResponse<T>(response: Response): Promise<T> {
     return response.text() as Promise<T>;
   }
 
-  return response.json();
+  try { return await response.json(); }
+  catch { throw new ApiError('The server returned an invalid JSON response.', response.status); }
 }
 
 export const api = {
   async uploadFile(token: string, data: FileUpload): Promise<FileRecord> {
-    return handleResponse<FileRecord>(await fetch(`${API_URL}/files/encrypted`, {
+    return handleResponse<FileRecord>(await request(`${API_URL}/files/encrypted`, {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }));
   },
   async listFiles(token: string): Promise<{ files: FileRecord[] }> {
-    return handleResponse(await fetch(`${API_URL}/files`, { headers: { Authorization: `Bearer ${token}` } }));
+    return handleResponse(await request(`${API_URL}/files`, { headers: { Authorization: `Bearer ${token}` } }));
   },
   async downloadFile(token: string, id: string): Promise<Uint8Array> {
-    const response = await fetch(`${API_URL}/files/${encodeURIComponent(id)}/data`, {
+    const response = await request(`${API_URL}/files/${encodeURIComponent(id)}/data`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!response.ok) await handleResponse(response);
     return new Uint8Array(await response.arrayBuffer());
   },
   async deleteFile(token: string, id: string): Promise<void> {
-    return handleResponse(await fetch(`${API_URL}/files/${encodeURIComponent(id)}`, {
+    return handleResponse(await request(`${API_URL}/files/${encodeURIComponent(id)}`, {
       method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
     }));
   },
   async register(data: RegisterRequest): Promise<User> {
-    const response = await fetch(`${API_URL}/auth/register`, {
+    const response = await request(`${API_URL}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -80,7 +91,7 @@ export const api = {
   },
 
   async login(data: LoginRequest): Promise<AuthResponse> {
-    const response = await fetch(`${API_URL}/auth/login`, {
+    const response = await request(`${API_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -89,7 +100,7 @@ export const api = {
   },
 
   async getCurrentUser(token: string): Promise<User> {
-    const response = await fetch(`${API_URL}/user/me`, {
+    const response = await request(`${API_URL}/user/me`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -99,7 +110,7 @@ export const api = {
   },
 
   async healthCheck(): Promise<string> {
-    const response = await fetch(`${API_URL}/health`);
+    const response = await request(`${API_URL}/health`);
     return handleResponse<string>(response);
   },
 
@@ -107,7 +118,7 @@ export const api = {
     token: string,
     data: SetupVaultRequest,
   ): Promise<SetupVaultResponse> {
-    const response = await fetch(`${API_URL}/vault/setup`, {
+    const response = await request(`${API_URL}/vault/setup`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -119,7 +130,7 @@ export const api = {
   },
 
   async getVaultKey(token: string): Promise<GetVaultKeyResponse> {
-    const response = await fetch(`${API_URL}/vault/key`, {
+    const response = await request(`${API_URL}/vault/key`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,

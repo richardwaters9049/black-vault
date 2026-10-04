@@ -11,6 +11,7 @@ import {
   ShieldQuestion,
   UserPlus,
 } from 'lucide-react';
+import { useOperationScope } from '@/lib/useOperationScope';
 import { Button } from '@/components/ui/button';
 import {
   errorMessage,
@@ -36,16 +37,17 @@ export default function TrustedContacts() {
   const [busyAction, setBusyAction] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [identityFailed, setIdentityFailed] = useState(false);
+  const [contactState, setContactState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const { start } = useOperationScope();
 
   useEffect(() => {
     let active = true;
-    Promise.all([native.getPublicIdentity(), native.listContacts()])
-      .then(([ownIdentity, savedContacts]) => {
-        if (!active) return;
-        setIdentity(ownIdentity);
-        setContacts(savedContacts);
-      })
-      .catch(reason => { if (active) setError(errorMessage(reason)); });
+    // Secure identity storage and public contact metadata can fail independently.
+    native.getPublicIdentity().then(value => { if (active) setIdentity(value); })
+      .catch(reason => { if (active) { setIdentityFailed(true); setError(current => [current, errorMessage(reason)].filter(Boolean).join(' ')); } });
+    native.listContacts().then(items => { if (active) { setContacts(items); setContactState('ready'); } })
+      .catch(reason => { if (active) { setContactState('error'); setError(current => [current, errorMessage(reason)].filter(Boolean).join(' ')); } });
     return () => { active = false; };
   }, []);
 
@@ -58,43 +60,50 @@ export default function TrustedContacts() {
 
   async function importContact(event: React.FormEvent) {
     event.preventDefault();
-    if (!name.trim() || !document.trim() || busyAction) return;
+    if (!name.trim() || !document.trim() || busyAction || contactState !== 'ready') return;
+    const isCurrent = start();
     setBusyAction('import'); setError(''); setNotice('');
     try {
       const contact = await native.importContactIdentity(name, document);
+      if (!isCurrent()) return;
       replaceContact(contact);
       setName(''); setDocument('');
       setNotice(contact.trust === 'key_changed'
         ? 'Identity changed. Previous verification was removed; verify the new fingerprint out of band.'
         : 'Public identity imported. Verify its fingerprint through a separate trusted channel.');
-    } catch (reason) { setError(errorMessage(reason)); }
-    finally { setBusyAction(''); }
+    } catch (reason) { if (isCurrent()) setError(errorMessage(reason)); }
+    finally { if (isCurrent()) setBusyAction(''); }
   }
 
   async function verifyContact(contact: TrustedContact) {
     const fingerprint = verification[contact.name]?.trim() ?? '';
     if (!fingerprint || busyAction) return;
+    const isCurrent = start();
     setBusyAction('verify:' + contact.name); setError(''); setNotice('');
     try {
       const updated = await native.verifyContactFingerprint(contact.name, fingerprint);
+      if (!isCurrent()) return;
       replaceContact(updated);
       setVerification(current => ({ ...current, [contact.name]: '' }));
       setNotice(contact.trust === 'key_changed'
         ? `${contact.name}'s new fingerprint is now verified.`
         : `${contact.name}'s fingerprint is now verified.`);
-    } catch (reason) { setError(errorMessage(reason)); }
-    finally { setBusyAction(''); }
+    } catch (reason) { if (isCurrent()) setError(errorMessage(reason)); }
+    finally { if (isCurrent()) setBusyAction(''); }
   }
 
   async function revokeContact(contact: TrustedContact) {
     if (busyAction) return;
+    const isCurrent = start();
     setBusyAction('revoke:' + contact.name); setError(''); setNotice('');
     try {
-      replaceContact(await native.revokeContact(contact.name));
+      const updated = await native.revokeContact(contact.name);
+      if (!isCurrent()) return;
+      replaceContact(updated);
       setVerification(current => ({ ...current, [contact.name]: '' }));
       setNotice(`Trust revoked for ${contact.name}.`);
-    } catch (reason) { setError(errorMessage(reason)); }
-    finally { setBusyAction(''); }
+    } catch (reason) { if (isCurrent()) setError(errorMessage(reason)); }
+    finally { if (isCurrent()) setBusyAction(''); }
   }
 
   async function copyIdentity() {
@@ -137,7 +146,7 @@ export default function TrustedContacts() {
         </div>
         <div className="mt-5 rounded-lg border border-white/[0.06] bg-black/20 p-4">
           <p className="text-[10px] uppercase tracking-wider text-slate-500">Fingerprint</p>
-          <p className="mt-2 break-all font-mono text-xs leading-6 text-sky-200">{identity?.fingerprint ?? 'Loading identity…'}</p>
+          <p className="mt-2 break-all font-mono text-xs leading-6 text-sky-200">{identity?.fingerprint ?? (identityFailed ? 'Identity unavailable.' : 'Loading identity…')}</p>
         </div>
         <Button variant="outline" className="mt-4" disabled={!identity || Boolean(busyAction)} onClick={() => void copyIdentity()}>
           <Clipboard size={14}/> Copy public identity
@@ -157,7 +166,7 @@ export default function TrustedContacts() {
         <textarea id="contact-identity" aria-label="Public identity document" maxLength={4096} rows={6} value={document} onChange={event => setDocument(event.target.value)}
           className="mt-2 w-full resize-none rounded-lg border border-border bg-black/20 px-3 py-2.5 font-mono text-[11px] leading-5 text-slate-300 placeholder:text-slate-600 focus:outline-2 focus:outline-blue-400"
           placeholder="Paste a BLACKVAULT-IDENTITY document" />
-        <Button type="submit" className="mt-4" disabled={!name.trim() || !document.trim() || Boolean(busyAction)}>
+        <Button type="submit" className="mt-4" disabled={contactState !== 'ready' || !name.trim() || !document.trim() || Boolean(busyAction)}>
           <UserPlus size={14}/>{busyAction === 'import' ? 'Importing…' : 'Import identity'}
         </Button>
       </form>
@@ -169,7 +178,9 @@ export default function TrustedContacts() {
       <span className="ml-1 font-mono text-[10px] text-slate-600">{contacts.length}</span>
     </div>
 
-    {contacts.length === 0
+    {contactState !== 'ready'
+      ? <p role="status" className="mt-4 text-xs text-slate-500">{contactState === 'loading' ? 'Loading contacts…' : 'Contact list unavailable.'}</p>
+      : contacts.length === 0
       ? <div className="mt-4 rounded-xl border border-dashed border-border bg-white/[0.015] px-6 py-10 text-center">
           <ShieldQuestion size={24} className="mx-auto text-slate-600"/>
           <p className="mt-3 text-sm text-slate-400">No contacts imported yet.</p>

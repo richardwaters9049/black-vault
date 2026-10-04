@@ -1,7 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useSyncExternalStore, ReactNode } from 'react';
 import { User } from './types';
+import { authStore } from './auth-store';
 
 interface AuthContextType {
   user: User | null;
@@ -15,50 +16,11 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const getInitialAuthState = () => {
-    if (typeof window === 'undefined') {
-      return { user: null, token: null, isLoading: true };
-    }
-
-    const storedToken = localStorage.getItem('auth_token');
-    const storedUser = localStorage.getItem('auth_user');
-
-    if (storedToken && storedUser) {
-      try {
-        return {
-          user: JSON.parse(storedUser),
-          token: storedToken,
-          isLoading: false,
-        };
-      } catch {
-        console.warn('Stored authentication state was invalid and has been cleared');
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_user');
-        return { user: null, token: null, isLoading: false };
-      }
-    }
-
-    return { user: null, token: null, isLoading: false };
-  };
-
-  const initialState = getInitialAuthState();
-  const [user, setUser] = useState<User | null>(initialState.user);
-  const [token, setToken] = useState<string | null>(initialState.token);
-  const [isLoading] = useState(initialState.isLoading);
-
-  const login = useCallback((newToken: string, newUser: User) => {
-    setToken(newToken);
-    setUser(newUser);
-    localStorage.setItem('auth_token', newToken);
-    localStorage.setItem('auth_user', JSON.stringify(newUser));
-  }, []);
-
-  const logout = useCallback(() => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_user');
-  }, []);
+  const { user, token, isLoading } = useSyncExternalStore(
+    authStore.subscribe, authStore.getSnapshot, authStore.getServerSnapshot,
+  );
+  const login = authStore.login;
+  const logout = authStore.logout;
 
   const value = {
     user,

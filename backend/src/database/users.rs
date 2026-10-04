@@ -107,7 +107,8 @@ mod tests {
         assert_eq!(user.password_hash, password_hash);
         assert!(!user.id.is_nil());
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", user.id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user.id)
             .execute(&pool)
             .await
             .expect("Failed to clean up test user");
@@ -129,7 +130,8 @@ mod tests {
 
         assert!(duplicate.is_err());
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", first_user.id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(first_user.id)
             .execute(&pool)
             .await
             .expect("Failed to clean up test user");
@@ -156,7 +158,8 @@ mod tests {
         assert_eq!(found_user.email, email);
         assert_eq!(found_user.password_hash, password_hash);
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", created_user.id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(created_user.id)
             .execute(&pool)
             .await
             .expect("Failed to clean up test user");

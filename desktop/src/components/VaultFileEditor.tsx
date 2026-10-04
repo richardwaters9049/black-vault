@@ -1,15 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { CheckCircle2, FilePlus2, FolderOpen, Save, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useOperationScope } from '@/lib/useOperationScope';
 import { errorMessage, formatFileSize, native, type VaultFile } from '@/lib/native';
 
 const TYPES = ['txt', 'md', 'json', 'csv', 'log'] as const;
 
-export default function VaultFileEditor({ vaultId, onFilesChange }: {
+export default function VaultFileEditor({ vaultId, files, onFilesChange }: {
   vaultId: string;
+  files: VaultFile[];
   onFilesChange: (files: VaultFile[]) => void;
 }) {
-  const [files, setFiles] = useState<VaultFile[]>([]);
   const [name, setName] = useState('');
   const [type, setType] = useState<(typeof TYPES)[number]>('txt');
   const [content, setContent] = useState('');
@@ -18,61 +19,67 @@ export default function VaultFileEditor({ vaultId, onFilesChange }: {
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<'idle' | 'working' | 'success' | 'error'>('idle');
   const [status, setStatus] = useState('');
+  const { start, invalidate } = useOperationScope(vaultId);
 
   useEffect(() => {
-    let active = true;
+    setConfirmDelete(null); setBusy(false);
     setName(''); setContent(''); setViewing(null); setPhase('idle'); setStatus('');
-    native.listVaultFiles().then(items => { if (active) { setFiles(items); onFilesChange(items); } })
-      .catch(reason => { if (active) { setPhase('error'); setStatus(errorMessage(reason)); } });
-    return () => { active = false; };
-  }, [vaultId, onFilesChange]);
+    return invalidate;
+  }, [vaultId, invalidate]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
-    const filename = viewing ? name.trim() + '.' + type : name.trim() + '.' + type;
+    const filename = name.trim() + '.' + type;
     if (!name.trim() || /[\\/\x00-\x1f]/.test(name) || name === '.' || name === '..') {
       setPhase('error'); setStatus('Enter a valid filename without slashes or control characters.'); return;
     }
     if (new TextEncoder().encode(content).byteLength > 5 * 1024 * 1024) {
       setPhase('error'); setStatus('Maximum file size is 5 MiB.'); return;
     }
+    const isCurrent = start();
     setBusy(true); setPhase('working'); setStatus('Scanning and encrypting directly into the vault…');
     try {
       const created = viewing ? await native.updateVaultTextFile(viewing.id, filename, content) : await native.createVaultTextFile(filename, content);
-      const next = await native.listVaultFiles();
-      setFiles(next); onFilesChange(next);
+      if (!isCurrent()) return;
+      // Use the committed result so a refresh cannot turn a saved file into a failure.
+      const next = [...files.filter(file => file.id !== created.id), created];
+      onFilesChange(next);
       setContent(''); setName(''); setViewing(null); setConfirmDelete(null);
       setPhase('success'); setStatus(created.name + ' encrypted and saved in the vault. No plaintext copy was created.');
-    } catch (reason) { setPhase('error'); setStatus(errorMessage(reason)); }
-    finally { setBusy(false); }
+    } catch (reason) { if (isCurrent()) { setPhase('error'); setStatus(errorMessage(reason)); } }
+    finally { if (isCurrent()) setBusy(false); }
   }
 
   async function open(file: VaultFile) {
     if (busy) return;
+    const isCurrent = start();
     setBusy(true); setPhase('working'); setStatus('Authenticating and opening encrypted file…');
     try {
       const value = await native.readVaultTextFile(file.id);
+      if (!isCurrent()) return;
       setViewing(file); setContent(value);
       const extension = TYPES.find(ext => file.name.toLowerCase().endsWith('.' + ext)) ?? 'txt';
       setType(extension); setName(file.name.slice(0, -(extension.length + 1))); setConfirmDelete(null);
       setPhase('success'); setStatus('Opened ' + file.name + ' in the session editor. Close it to clear the editor.');
-    } catch (reason) { setPhase('error'); setStatus(errorMessage(reason)); }
-    finally { setBusy(false); }
+    } catch (reason) { if (isCurrent()) { setPhase('error'); setStatus(errorMessage(reason)); } }
+    finally { if (isCurrent()) setBusy(false); }
   }
-  function close() { setViewing(null); setName(''); setContent(''); setConfirmDelete(null); setPhase('idle'); setStatus('Editor cleared.'); }
+  function close() { invalidate(); setBusy(false); setViewing(null); setName(''); setContent(''); setConfirmDelete(null); setPhase('idle'); setStatus('Editor cleared.'); }
   async function remove(file: VaultFile) {
     if (busy) return;
     if (confirmDelete !== file.id) { setConfirmDelete(file.id); return; }
+    const isCurrent = start();
     setBusy(true); setPhase('working'); setStatus('Deleting encrypted file…');
     try {
       await native.deleteVaultFile(file.id);
-      const next = await native.listVaultFiles();
-      setFiles(next); onFilesChange(next);
+      if (!isCurrent()) return;
+      const next = files.filter(item => item.id !== file.id);
+      onFilesChange(next);
       if (viewing?.id === file.id) close();
       setConfirmDelete(null); setPhase('success'); setStatus('Encrypted file deleted. This cannot be undone.');
-    } catch (reason) { setPhase('error'); setStatus(errorMessage(reason)); }
-    finally { setBusy(false); }
+    } catch (reason) { if (isCurrent()) { setPhase('error'); setStatus(errorMessage(reason)); } }
+    finally { if (isCurrent()) setBusy(false); }
   }
 
   return <section aria-label="Create files in vault" className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(210px,1fr)]">

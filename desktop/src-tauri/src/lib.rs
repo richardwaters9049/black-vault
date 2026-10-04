@@ -23,7 +23,7 @@ pub(crate) fn context<R: tauri::Runtime>() -> tauri::Context<R> {
     tauri::generate_context!()
 }
 
-pub fn run() {
+pub fn run() -> Result<(), tauri::Error> {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::PickerState::default())
@@ -91,7 +91,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             biometric::get_biometric_status,
             commands::get_desktop_info,
-            commands::select_file,
             commands::list_vaults,
             commands::create_vault,
             commands::unlock_vault,
@@ -123,5 +122,4 @@ pub fn run() {
             contact_commands::revoke_contact
         ])
         .run(context())
-        .expect("Unable to launch Black Vault");
 }

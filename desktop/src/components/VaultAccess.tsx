@@ -32,13 +32,14 @@ export default function VaultAccess({ onAuthenticated }: { onAuthenticated: (vau
 
   useEffect(() => {
     let active = true;
-    Promise.all([native.listVaults(), native.getBiometricStatus()]).then(([items, biometric]) => {
+    native.listVaults().then(items => {
       if (!active) return;
-      setVaults(items);
-      setSelected(items[0]?.id ?? '');
-      setCreating(items.length === 0);
-      setTouchIdAvailable(biometric.available && biometric.kind === 'touch_id');
+      setVaults(items); setSelected(items[0]?.id ?? ''); setCreating(items.length === 0);
     }).catch(reason => { if (active) setError(errorMessage(reason)); });
+    // A biometric-status failure must not block password-based vault access.
+    native.getBiometricStatus().then(biometric => {
+      if (active) setTouchIdAvailable(biometric.available && biometric.kind === 'touch_id');
+    }).catch(() => { if (active) setBiometricMessage('Biometric status unavailable. Native deletion will still enforce authentication when required.'); });
     return () => { active = false; };
   }, []);
 

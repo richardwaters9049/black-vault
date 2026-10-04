@@ -1,3 +1,4 @@
+use crate::services::auth::AuthError;
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde::{ser::SerializeStruct, Serialize, Serializer};
 
@@ -36,26 +37,26 @@ impl ErrorResponse {
         }
     }
 
-    pub fn from_service_error(error: String) -> Self {
-        let status = match error.as_str() {
-            "An account with that email already exists" => StatusCode::CONFLICT,
-            "Password must be at least 12 characters"
-            | "Password must contain at least one uppercase letter"
-            | "Password must contain at least one lowercase letter"
-            | "Password must contain at least one digit"
-            | "Invalid email format"
-            | "Email is required"
-            | "Password is required" => StatusCode::BAD_REQUEST,
-            "Invalid email or password" => StatusCode::UNAUTHORIZED,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
+    pub fn from_auth_error(error: AuthError) -> Self {
+        let status = match error {
+            AuthError::EmailTaken => StatusCode::CONFLICT,
+            AuthError::InvalidCredentials => StatusCode::UNAUTHORIZED,
+            AuthError::Unavailable => StatusCode::INTERNAL_SERVER_ERROR,
+            AuthError::EmailRequired
+            | AuthError::InvalidEmail
+            | AuthError::PasswordRequired
+            | AuthError::PasswordTooShort
+            | AuthError::UppercaseRequired
+            | AuthError::LowercaseRequired
+            | AuthError::DigitRequired => StatusCode::BAD_REQUEST,
         };
-
         if status == StatusCode::INTERNAL_SERVER_ERROR {
             eprintln!("[black-vault-api] internal service error (details withheld)");
-            return Self::internal_server_error("Internal server error");
         }
-
-        Self { status, error }
+        Self {
+            status,
+            error: error.message().into(),
+        }
     }
 }
 
@@ -83,8 +84,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn unknown_service_errors_are_not_exposed() {
-        let response = ErrorResponse::from_service_error("database connection details".into());
+    fn internal_service_errors_are_not_exposed() {
+        let response = ErrorResponse::from_auth_error(AuthError::Unavailable);
 
         assert_eq!(response.status, StatusCode::INTERNAL_SERVER_ERROR);
         assert_eq!(response.error, "Internal server error");
@@ -92,9 +93,22 @@ mod tests {
 
     #[test]
     fn known_service_errors_keep_their_client_message() {
-        let response = ErrorResponse::from_service_error("Invalid email or password".into());
+        let response = ErrorResponse::from_auth_error(AuthError::InvalidCredentials);
 
         assert_eq!(response.status, StatusCode::UNAUTHORIZED);
         assert_eq!(response.error, "Invalid email or password");
+    }
+
+    #[test]
+    fn typed_auth_errors_preserve_http_statuses() {
+        for (error, status) in [
+            (AuthError::EmailTaken, StatusCode::CONFLICT),
+            (AuthError::InvalidCredentials, StatusCode::UNAUTHORIZED),
+            (AuthError::Unavailable, StatusCode::INTERNAL_SERVER_ERROR),
+            (AuthError::InvalidEmail, StatusCode::BAD_REQUEST),
+            (AuthError::PasswordTooShort, StatusCode::BAD_REQUEST),
+        ] {
+            assert_eq!(ErrorResponse::from_auth_error(error).status, status);
+        }
     }
 }

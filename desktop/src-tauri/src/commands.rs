@@ -20,7 +20,7 @@ use tauri_plugin_dialog::DialogExt;
 #[derive(Default)]
 pub struct PickerState(Mutex<()>);
 
-// Only macOS/Tauri native drag events may populate this state. JS never supplies a path.
+// Only Tauri native drag events may populate this state. JS never supplies a path.
 #[derive(Default)]
 pub struct DroppedFileState(pub Mutex<Option<PathBuf>>);
 
@@ -65,20 +65,20 @@ pub fn get_desktop_info() -> DesktopInfo {
     }
 }
 
-// Only the native picker supplies a path. JavaScript cannot request arbitrary paths.
+// Only a native drag event supplies this path. JavaScript cannot request arbitrary paths.
 // This reads filesystem metadata, never file contents, and never persists the selection.
 fn describe_selection(path: &Path) -> Result<SelectedFile, NativeError> {
-    let metadata = fs::metadata(path).map_err(|_| NativeError::unavailable())?;
+    let metadata = fs::symlink_metadata(path).map_err(|_| NativeError::unavailable())?;
     if !metadata.is_file() {
         return Err(NativeError {
             code: "not_a_file",
             message: "Select a regular file rather than a folder or device.",
         });
     }
-    if metadata.len() > 9_007_199_254_740_991 {
+    if metadata.len() > crate::file_crypto::MAX_FILE_BYTES {
         return Err(NativeError {
             code: "file_too_large",
-            message: "The selected file size cannot be represented accurately.",
+            message: "Files must not exceed 5 MiB.",
         });
     }
     let name = path
@@ -93,45 +93,6 @@ fn describe_selection(path: &Path) -> Result<SelectedFile, NativeError> {
         name: name.to_owned(),
         size_bytes: metadata.len(),
     })
-}
-
-#[tauri::command]
-pub async fn select_file(app: tauri::AppHandle) -> Result<Option<SelectedFile>, NativeError> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<PickerState>();
-        let _guard = state.0.try_lock().map_err(|_| NativeError {
-            code: "picker_busy",
-            message: "A file picker is already open.",
-        })?;
-        let selection = app
-            .dialog()
-            .file()
-            .set_title("Select a file — Black Vault")
-            .blocking_pick_file();
-        let Some(selection) = selection else {
-            debug_trace!("black_vault event=file_selection_cancelled");
-            return Ok(None);
-        };
-        let path = selection
-            .into_path()
-            .map_err(|_| NativeError::unavailable())?;
-        let result = describe_selection(&path);
-        // Deliberately exclude paths, filenames, sizes and file contents from audit events.
-        debug_trace!(
-            "black_vault event={}",
-            if result.is_ok() {
-                "file_selected"
-            } else {
-                "file_selection_rejected"
-            }
-        );
-        result.map(Some)
-    })
-    .await
-    .map_err(|_| NativeError {
-        code: "picker_failed",
-        message: "The native file picker could not complete. Please try again.",
-    })?
 }
 
 #[cfg(test)]
@@ -167,6 +128,26 @@ mod tests {
             "not_a_file"
         );
     }
+    #[test]
+    fn staged_metadata_rejects_oversized_files_and_symlinks() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("large.txt");
+        fs::File::create(&path)
+            .unwrap()
+            .set_len(crate::file_crypto::MAX_FILE_BYTES + 1)
+            .unwrap();
+        assert_eq!(
+            describe_selection(&path).unwrap_err().code,
+            "file_too_large"
+        );
+        #[cfg(unix)]
+        {
+            let link = temporary.path().join("link.txt");
+            std::os::unix::fs::symlink(fixture(), &link).unwrap();
+            assert_eq!(describe_selection(&link).unwrap_err().code, "not_a_file");
+        }
+    }
+
     #[test]
     fn desktop_info_contract_matches_the_typescript_field_names() {
         assert_eq!(
@@ -280,6 +261,7 @@ pub fn lock_vault(
     store: tauri::State<'_, crate::vault::VaultStore>,
     dropped: tauri::State<'_, DroppedFileState>,
 ) -> Result<(), crate::vault::VaultError> {
+    // A poisoned drop state is unusable, but must not prevent clearing the active vault key.
     if let Ok(mut pending) = dropped.0.lock() {
         *pending = None;
     }

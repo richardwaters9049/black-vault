@@ -20,3 +20,7 @@ From the repository root:
 Do not add new product features to the legacy stack. Changes here should be limited to preservation, compatibility/security fixes, or historical investigation.
 
 Shared cryptographic fixtures live under `../tests/fixtures/`. They remain architecture-neutral test evidence and are intentionally used by the desktop Rust tests.
+
+## Preservation and maintenance
+
+The 4 October maintenance pass retains these paths and shared formats. It updates browser error/storage handling, typed API authentication errors and dependencies without adding desktop runtime requirements. Docker development ports bind to `127.0.0.1`. See the [audit record](../docs/engineering/CODEBASE_AUDIT_2026-10-04.md) for checks and outstanding upstream dependency findings.

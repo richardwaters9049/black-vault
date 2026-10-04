@@ -1,5 +1,3 @@
-#![allow(dead_code)] // Phase C stays Rust-only until the contact security gate passes.
-
 use crate::transfer::PublicIdentity;
 use serde::{Deserialize, Serialize};
 use std::{

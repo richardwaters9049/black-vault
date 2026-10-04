@@ -6,6 +6,8 @@ Active candidate: `release/0.2.0-rc.1`, version `0.2.0-rc.1`. Root/desktop READM
 
 Touch ID authorises permanent deletion natively when available; password authentication still unwraps vault keys. There is no standalone biometric-success IPC command. Trusted contacts/OS identity storage and Rust transfer primitives are implemented; end-user package send/receive, replay history and biometric vault enrolment are deferred. Contact metadata/trust JSON is not encrypted or authenticated against valid local replacement.
 
+The [4 October maintenance audit](engineering/CODEBASE_AUDIT_2026-10-04.md) records the newer locking/error-handling implementation, cleanup and local verification. App owns the root session and parent-file list; stale asynchronous view responses must not restore protected data after closure or locking. Historical counts and obsolete components named below remain historical context.
+
 Routine CI uses Linux validation. Reserve full native packaging for release branches/manual dispatch. Record real OS credential and packaged-GUI evidence separately; never tick human-present biometric/GUI acceptance from mocked/unit tests.
 
 

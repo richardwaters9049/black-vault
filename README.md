@@ -10,7 +10,7 @@
 - Native picker/drop import, encrypted filenames and contents, and a bounded offline policy gate.
 - Parent and nested vault text creation/editing, export, deletion and bidirectional encrypted transfers.
 - Four-digit nested PINs protected additionally by the parent vault key.
-- Explicit locking, startup locking and five-minute inactivity locking.
+- Explicit locking, startup locking and five-minute inactivity locking, with immediate closure of protected views and rejection of stale responses.
 - Atomic encrypted persistence, recovery and interruption regression tests.
 - Public identity documents and independently verified contact fingerprints, with unverified, verified, key-changed and revoked states.
 - OS credential storage for private identity material; no plaintext fallback.
@@ -24,6 +24,8 @@ Files are limited to **5 MiB** for local import. The import policy gate is not a
 Recipient encryption, sender signatures, bounded package parsing and negative/vector tests exist in Rust. **The application does not yet send or receive `.blackvault` packages.** Package file export/import, received-vault UI, durable replay tracking and cross-platform transfer workflows remain a separate future feature. Trusted Contacts is an identity-management feature in this release.
 
 ## Verification
+
+The [4 October maintenance audit](docs/engineering/CODEBASE_AUDIT_2026-10-04.md) records **263 passing local tests**, type/lint checks and a rebuilt ad-hoc signed macOS application, with remaining dependency findings explicitly tracked.
 
 The local macOS candidate gate covers frontend tests/build, Rust tests, Rustfmt, strict Clippy, dependency audits and native application packaging. The dated [v0.2.0 validation record](docs/release/v0.2.0-validation.md) records exact results and unresolved acceptance items.
 
@@ -44,8 +46,11 @@ Read the [architecture](docs/architecture/Architecture.md), [security architectu
 **Directory:** repository root (`/Users/richy/Documents/Github/cyber-work/black-vault` on the development Mac).
 
 ```bash
-./start.sh dev
+./start.sh       # Launch the compiled macOS application
+./start.sh dev   # Explicitly start native development mode
 ```
+
+A local development environment file does not change the default compiled-app launch.
 
 **Directory:** `desktop/` beneath that root. Requires Rust 1.90+, Node.js 22.12+ and the OS-specific Tauri prerequisites.
 
@@ -71,3 +76,5 @@ The compiled macOS app is `desktop/src-tauri/target/release/bundle/macos/Black V
 | `legacy/`, `backend/`, `frontend/` | Preserved web-era reference implementation |
 
 Start with the [documentation index](docs/README.md) and [desktop development guide](desktop/README.md). The final sprint records are [acceptance and scope](docs/sprints/sprint-11/SPRINT_11_RELEASE_ACCEPTANCE.md) and [release preparation](docs/sprints/sprint-12/SPRINT_12_RELEASE_PREPARATION.md). [v0.1.0 validation](docs/release/v0.1.0-validation.md) is historical evidence and does not certify newer functionality.
+
+The [4 October codebase audit](docs/engineering/CODEBASE_AUDIT_2026-10-04.md) records security/locking fixes, unused-code removal, legacy maintenance and current local checks.

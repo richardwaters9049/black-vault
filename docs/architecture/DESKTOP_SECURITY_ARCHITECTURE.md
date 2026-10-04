@@ -26,7 +26,7 @@ Sensitive writes use narrow temporary names, file synchronisation, rename and di
 
 ## Authentication and destruction
 
-Only successful Rust password authentication creates a root session. The locked Overview is not a security boundary; protected file commands independently require the native session. Startup, explicit lock and five-minute inactivity release the active root key. Delayed-timer/focus checks are not native sleep interception.
+Only successful Rust password authentication creates a root session. The locked Overview is not a security boundary; protected file commands independently require the native session. Startup, explicit lock and five-minute inactivity release the active root key. Protected panels and drafts are cleared as locking begins; operation-generation checks prevent late IPC responses from restoring editor content. Native failure is reported and does not become a successful UI lock. Delayed-timer/focus checks are not native sleep interception.
 
 Permanent locked-vault deletion requires exact typed confirmation and fresh native biometrics when available. Cancellation, failed preflight, false success and timeout abort. Unavailable biometrics leave the typed-confirmation policy. The standalone biometric IPC command is removed; Touch ID cannot unlock vault master keys. See the [biometric model](../security/BIOMETRIC_SECURITY_MODEL.md).
 
@@ -44,6 +44,6 @@ The Rust-only foundation implements HPKE recipient encryption, mandatory Ed25519
 
 ## Verification and limitations
 
-Current results are dated in the [candidate record](../release/v0.2.0-validation.md); historical 46 Rust/22 frontend counts belong to v0.1.0. Dependency audit warnings remain recorded, including Linux GTK/Tauri unsoundness/unmaintained dependencies and a yanked crate.
+Current results are dated in the [candidate record](../release/v0.2.0-validation.md); historical 46 Rust/22 frontend counts belong to v0.1.0. The [4 October maintenance audit](../engineering/CODEBASE_AUDIT_2026-10-04.md) records newer local checks. Two Linux GTK/Tauri/tooling warnings remain; the yanked yoke-derive version has been updated. Legacy dependency findings are tracked separately in that audit.
 
 There is no forgotten-password recovery, all-state rollback protection, independent security certification, notarised public distribution, guaranteed memory erasure, or protection from a compromised unlocked host. See the [threat model](../security/THREAT_MODEL.md).

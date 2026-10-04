@@ -56,23 +56,20 @@ async fn create_test_user(pool: &PgPool) -> Uuid {
 
     let password_hash = "$argon2id$v=19$m=19456,t=2,p=1$test$test";
 
-    sqlx::query!(
-        r#"
-        INSERT INTO users (email, password_hash)
-        VALUES ($1, $2)
-        RETURNING id
-        "#,
-        email,
-        password_hash
+    // Test setup uses typed runtime binding; production queries keep their offline metadata.
+    sqlx::query_scalar::<_, Uuid>(
+        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id",
     )
+    .bind(email)
+    .bind(password_hash)
     .fetch_one(pool)
     .await
     .expect("Failed to create test user")
-    .id
 }
 
 async fn cleanup_user(pool: &PgPool, user_id: Uuid) {
-    sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
         .execute(pool)
         .await
         .expect("Failed to clean up test user");

@@ -13,32 +13,30 @@ describe('typed Tauri command boundary', () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 
-  it('accepts selection and cancellation without sending a path to Rust', async () => {
+  it('describes a native staged selection without sending a path to Rust', async () => {
     vi.stubGlobal('isTauri', true);
     const file: SelectedFile = { name: 'Café.txt', sizeBytes: 104 };
     const handler = vi.fn((command, args) => {
-      expect(command).toBe('select_file');
+      expect(command).toBe('describe_dropped_file');
       expect(args).toEqual({});
       return file;
     });
     mockIPC(handler);
-    expect(await native.selectFile()).toEqual(file);
-    mockIPC(() => null);
-    expect(await native.selectFile()).toBeNull();
+    expect(await native.describeDroppedFile()).toEqual(file);
   });
 
   it('preserves structured native failures', async () => {
     vi.stubGlobal('isTauri', true);
     const error = { code: 'file_unavailable', message: 'The selected file is unavailable.' };
     mockIPC(() => { throw error; });
-    await expect(native.selectFile()).rejects.toEqual(error);
+    await expect(native.describeDroppedFile()).rejects.toEqual(error);
     expect(errorMessage(error)).toBe(error.message);
     expect(errorMessage(null)).toContain('could not be completed');
   });
 
   it('refuses native operations in a browser preview', async () => {
     vi.stubGlobal('isTauri', false);
-    await expect(native.selectFile()).rejects.toThrow('desktop application');
+    await expect(native.describeDroppedFile()).rejects.toThrow('desktop application');
   });
 });
 
@@ -92,4 +90,10 @@ describe('Phase 03 transfer IPC contract', () => {
     expect(await native.transferParentFileToNested(nestedId, '0427', fileId)).toEqual(result);
     expect(handler).toHaveBeenCalledOnce();
   });
+});
+
+it('provides a useful fallback for blank error messages', () => {
+  for (const value of [new Error(''), '  ', { message: '' }, null]) {
+    expect(errorMessage(value)).toContain('could not be completed');
+  }
 });

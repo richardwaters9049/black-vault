@@ -13,6 +13,38 @@ use crate::models::user::UserCredentials;
 
 use crate::services::jwt::create_token;
 
+// HTTP status mapping uses variants, so changing a message cannot change its meaning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthError {
+    EmailRequired,
+    InvalidEmail,
+    PasswordRequired,
+    PasswordTooShort,
+    UppercaseRequired,
+    LowercaseRequired,
+    DigitRequired,
+    EmailTaken,
+    InvalidCredentials,
+    Unavailable,
+}
+
+impl AuthError {
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::EmailRequired => "Email is required",
+            Self::InvalidEmail => "Invalid email format",
+            Self::PasswordRequired => "Password is required",
+            Self::PasswordTooShort => "Password must be at least 12 characters",
+            Self::UppercaseRequired => "Password must contain at least one uppercase letter",
+            Self::LowercaseRequired => "Password must contain at least one lowercase letter",
+            Self::DigitRequired => "Password must contain at least one digit",
+            Self::EmailTaken => "An account with that email already exists",
+            Self::InvalidCredentials => "Invalid email or password",
+            Self::Unavailable => "Internal server error",
+        }
+    }
+}
+
 pub fn hash_password(password: &str) -> Result<String, String> {
     let salt = SaltString::generate(&mut OsRng);
 
@@ -32,38 +64,38 @@ pub fn verify_password(password: &str, stored_hash: &str) -> Result<bool, String
         .is_ok())
 }
 
-fn validate_email(email: &str) -> Result<(), String> {
+fn validate_email(email: &str) -> Result<(), AuthError> {
     let email = email.trim().to_lowercase();
 
     if email.is_empty() {
-        return Err("Email is required".to_string());
+        return Err(AuthError::EmailRequired);
     }
 
     let email_regex = regex::Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
-        .map_err(|_| "Invalid email validation pattern".to_string())?;
+        .map_err(|_| AuthError::Unavailable)?;
 
     if !email_regex.is_match(&email) {
-        return Err("Invalid email format".to_string());
+        return Err(AuthError::InvalidEmail);
     }
 
     Ok(())
 }
 
-fn validate_password(password: &str) -> Result<(), String> {
+fn validate_password(password: &str) -> Result<(), AuthError> {
     if password.len() < 12 {
-        return Err("Password must be at least 12 characters".to_string());
+        return Err(AuthError::PasswordTooShort);
     }
 
     if !password.chars().any(|c| c.is_ascii_uppercase()) {
-        return Err("Password must contain at least one uppercase letter".to_string());
+        return Err(AuthError::UppercaseRequired);
     }
 
     if !password.chars().any(|c| c.is_ascii_lowercase()) {
-        return Err("Password must contain at least one lowercase letter".to_string());
+        return Err(AuthError::LowercaseRequired);
     }
 
     if !password.chars().any(|c| c.is_ascii_digit()) {
-        return Err("Password must contain at least one digit".to_string());
+        return Err(AuthError::DigitRequired);
     }
 
     Ok(())
@@ -73,29 +105,26 @@ pub async fn register_user(
     pool: &PgPool,
     email: &str,
     password: &str,
-) -> Result<UserCredentials, String> {
+) -> Result<UserCredentials, AuthError> {
     validate_email(email)?;
     validate_password(password)?;
 
     let email = email.trim().to_lowercase();
 
-    let password_hash = hash_password(password)?;
+    let password_hash = hash_password(password).map_err(|_| AuthError::Unavailable)?;
 
     let user = create_user(pool, &email, &password_hash)
         .await
         .map_err(|error| {
             if let sqlx::Error::Database(database_error) = &error {
                 if database_error.constraint() == Some("users_email_key") {
-                    return "An account with that email already exists".to_string();
+                    return AuthError::EmailTaken;
                 }
             }
 
-            tracing::error!(
-                error = ?error,
-                "Failed to create user"
-            );
+            tracing::error!("Failed to create user");
 
-            "Unable to create account".to_string()
+            AuthError::Unavailable
         })?;
 
     Ok(UserCredentials {
@@ -110,50 +139,40 @@ pub async fn login_user(
     config: &Config,
     email: &str,
     password: &str,
-) -> Result<(UserCredentials, String), String> {
+) -> Result<(UserCredentials, String), AuthError> {
     let email = email.trim().to_lowercase();
 
     if email.is_empty() {
-        return Err("Email is required".to_string());
+        return Err(AuthError::EmailRequired);
     }
 
     if password.is_empty() {
-        return Err("Password is required".to_string());
+        return Err(AuthError::PasswordRequired);
     }
 
-    let user = find_user_by_email(pool, &email).await.map_err(|error| {
-        tracing::error!(
-            error = ?error,
-            "Failed to find user during login"
-        );
+    let user = find_user_by_email(pool, &email).await.map_err(|_| {
+        tracing::error!("Failed to find user during login");
 
-        "Unable to authenticate".to_string()
+        AuthError::Unavailable
     })?;
 
-    let user = user.ok_or_else(|| "Invalid email or password".to_string())?;
+    let user = user.ok_or(AuthError::InvalidCredentials)?;
 
-    let password_valid = verify_password(password, &user.password_hash).map_err(|error| {
-        tracing::error!(
-            error = %error,
-            "Failed to verify password"
-        );
+    let password_valid = verify_password(password, &user.password_hash).map_err(|_| {
+        tracing::error!("Failed to verify password");
 
-        "Unable to authenticate".to_string()
+        AuthError::Unavailable
     })?;
 
     if !password_valid {
-        return Err("Invalid email or password".to_string());
+        return Err(AuthError::InvalidCredentials);
     }
 
-    let token =
-        create_token(user.id, &config.jwt_secret, config.jwt_expiration).map_err(|error| {
-            tracing::error!(
-                error = %error,
-                "Failed to create authentication token"
-            );
+    let token = create_token(user.id, &config.jwt_secret, config.jwt_expiration).map_err(|_| {
+        tracing::error!("Failed to create authentication token");
 
-            "Unable to authenticate".to_string()
-        })?;
+        AuthError::Unavailable
+    })?;
 
     let credentials = UserCredentials {
         id: user.id,
@@ -235,7 +254,8 @@ mod tests {
 
         assert!(verify_password(password, &user.password_hash,).expect("Failed to verify password"));
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", user.id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user.id)
             .execute(&pool)
             .await
             .expect("Failed to clean up test user");
@@ -255,7 +275,8 @@ mod tests {
 
         assert_eq!(user.email, expected_email);
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", user.id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user.id)
             .execute(&pool)
             .await
             .expect("Failed to clean up test user");
@@ -269,7 +290,7 @@ mod tests {
 
         match result {
             Err(error) => {
-                assert_eq!(error, "Password must be at least 12 characters");
+                assert_eq!(error.message(), "Password must be at least 12 characters");
             }
 
             Ok(_) => {
@@ -302,7 +323,8 @@ mod tests {
 
         assert!(!token.is_empty());
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", registered_user.id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(registered_user.id)
             .execute(&pool)
             .await
             .expect("Failed to clean up login test user");
@@ -326,7 +348,7 @@ mod tests {
 
         match result {
             Err(error) => {
-                assert_eq!(error, "Invalid email or password");
+                assert_eq!(error.message(), "Invalid email or password");
             }
 
             Ok(_) => {
@@ -334,7 +356,8 @@ mod tests {
             }
         }
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", registered_user.id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(registered_user.id)
             .execute(&pool)
             .await
             .expect("Failed to clean up login test user");
@@ -352,7 +375,7 @@ mod tests {
 
         match result {
             Err(error) => {
-                assert_eq!(error, "Invalid email or password");
+                assert_eq!(error.message(), "Invalid email or password");
             }
 
             Ok(_) => {
@@ -387,7 +410,8 @@ mod tests {
 
         assert!(!token.is_empty());
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", registered_user.id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(registered_user.id)
             .execute(&pool)
             .await
             .expect("Failed to clean up login test user");

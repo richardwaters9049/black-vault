@@ -238,7 +238,8 @@ mod tests {
         assert_eq!(retrieved.encryption_nonce, "encrypted_nonce");
         assert_eq!(retrieved.file_size, 12345);
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up test user");
@@ -276,7 +277,8 @@ mod tests {
 
         assert_eq!(retrieved, encrypted_data);
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up test user");
@@ -310,12 +312,14 @@ mod tests {
 
         assert!(result.is_none());
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", owner_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(owner_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up owner");
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", attacker_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(attacker_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up attacker");
@@ -351,12 +355,14 @@ mod tests {
 
         assert!(result.is_none());
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", owner_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(owner_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up owner");
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", attacker_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(attacker_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up attacker");
@@ -385,12 +391,14 @@ mod tests {
         assert_eq!(files[0].user_id, user_a_id);
         assert_eq!(files[0].encrypted_filename, "user_a_file");
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", user_a_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_a_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up user A");
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", user_b_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_b_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up user B");
@@ -420,12 +428,14 @@ mod tests {
 
         assert!(result.is_none());
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", owner_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(owner_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up owner");
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", attacker_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(attacker_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up attacker");
@@ -460,7 +470,8 @@ mod tests {
 
         assert!(retrieved.is_none());
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up test user");
@@ -496,12 +507,14 @@ mod tests {
 
         assert!(retrieved.is_some());
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", owner_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(owner_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up owner");
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", attacker_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(attacker_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up attacker");

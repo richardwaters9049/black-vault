@@ -1,4 +1,4 @@
-#![allow(dead_code)] // Phase A is intentionally Rust-only until the protocol gate passes.
+#![allow(dead_code)] // Package send/receive primitives are retained for protocol tests; no transfer IPC is exposed.
 
 //! Rust-only foundation for transferable Black Vault packages.
 //!

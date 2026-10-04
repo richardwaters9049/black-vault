@@ -1,61 +1,40 @@
 # Black Vault — Project Summary
 
-**Updated:** 29 September 2026  
-**Active branch:** `feat/desktop-migration`  
-**Direction:** Offline-first, standalone cybersecurity desktop application.
+**Updated:** 4 October 2026. **Candidate:** 0.2.0-rc.1. **Latest maintenance branch:** `chore/repository-audit`.
 
-## Overview
+## Current product
 
-Black Vault is transitioning from a hosted Rust/Axum/PostgreSQL and Next.js encrypted-file application to a local-first desktop application using Tauri 2, React, Vite, TypeScript and Rust. macOS Apple Silicon is the initial target; Windows and Linux are future distribution targets. The desktop app must not require an account, API server, PostgreSQL, Docker or cloud service to perform its core vault operations.
+Black Vault is an offline Tauri 2 / Rust / React / TypeScript desktop vault. Normal operation requires no account, API, PostgreSQL, Docker or network service. `desktop/` is the active application; `backend/` and `frontend/` retain stable paths as legacy implementations and cryptographic compatibility references. See the [root README](../../README.md) and [as-built architecture](../architecture/Architecture.md).
 
-The existing `backend/` and `frontend/` are preserved as working legacy implementations and cryptographic compatibility references. Do not delete, overwrite or destructively migrate their data. The authoritative desktop design is `../architecture/DESKTOP_SECURITY_ARCHITECTURE.md`; older `../architecture/Encryption_Architecture.md` documents the web-era design.
+Implemented functionality includes password-protected independent local vaults, bounded native picker/drop imports, encrypted names and contents, parent/nested text management, explicit export, deletion, encrypted transfers and crash recovery. Nested four-digit PINs are additionally protected by the parent key; they are convenience compartments, not operating-system isolation.
 
-## Verified implementation at Sprint 01
+Startup and five-minute inactivity request native locking. Protected views clear immediately when locking starts; late IPC responses cannot restore plaintext or filenames. Native success is required to report a locked session. Touch ID is confined to permanent locked-vault deletion when available and does not unwrap vault keys.
 
-- `desktop/` contains Tauri 2, React 19, Vite, TypeScript, Tailwind CSS and independent npm/Cargo lockfiles.
-- A native dark dashboard, typed `get_desktop_info` and `select_file` commands, restricted main-window IPC and native macOS picker are implemented.
-- The picker returns only filename and size, without file contents or persistent path.
-- A release Apple Silicon `Black Vault.app` was built and its ad-hoc signature verified. This is not notarised distribution.
-- Sprint 01 reported 92 existing Rust tests, 16 frontend tests with local API, nine desktop frontend tests and four desktop Rust tests passing.
-- Native visual interaction and picker acceptance remain outstanding: computer-use permission prevented the previous agent from inspecting the bundled app. These results are historical, not a fresh test run on 29 September.
-- No desktop vault, local database, encrypted desktop file storage, sharing, durable audit or isolated-process engine exists yet.
+Public identities and contact fingerprint management are implemented. Private transfer identities use OS credential storage without a plaintext fallback. Public contact JSON is outside encrypted vault storage and is not authenticated against arbitrary valid local replacement.
 
-## Preserved cryptographic work
+## Transfer and future scope
 
-The legacy implementation has shared Rust/TypeScript deterministic vectors in `tests/fixtures/crypto-v1.json` and bidirectional interoperability tests. Canonical Argon2id uses a decoded 16-byte standard Base64 salt, version 19, memory 19456 KiB, two iterations, parallelism one and 32-byte output. The explicitly named legacy salt-text derivation is for provenance-verified recovery only, never automatic selection. AES-256-GCM uses fresh 12-byte nonces in production.
+Rust recipient-encryption, signature and bounded-parser primitives are tested foundations. End-user `.blackvault` package send/receive, package persistence, received-vault UI and durable replay history remain deferred. See the [implementation status](../architecture/SECURE_SHARING_IMPLEMENTATION_PLAN.md). Streaming/chunked storage, authenticated contact-state protection and OS/process isolation remain separate future design work. No forgotten-password recovery or guaranteed memory erasure is claimed.
 
-The web implementation supports browser vault setup/unlock/lock and version 2 encrypted file uploads, downloads and owner-scoped management, with a 5 MiB plaintext limit. Its file format and AAD domain strings must remain compatible. The web implementation's JWT, browser storage, API and PostgreSQL assumptions must not be copied into the desktop session model.
+## Latest maintenance and verification
 
-## Desktop product direction
+The [4 October audit](../engineering/CODEBASE_AUDIT_2026-10-04.md) records security/locking and error-handling fixes, concise code comments, verified unused-code/assets/dependency removal and legacy maintenance. Local results total 263 passing tests: 45 desktop UI, 94 desktop Rust, 97 legacy Rust and 27 legacy frontend, including the live disposable API round trip. One native acceptance test remains ignored. TypeScript, ESLint, Rustfmt, strict Clippy, builds and ad-hoc macOS codesign verification passed.
 
-1. Independent local vaults with separate vault master keys, metadata and lifecycle.
-2. Rust-owned secrets and authorised Tauri commands; React is a presentation layer.
-3. Encrypted persistent vault containers and file blobs; investigate authenticated metadata materialised into an SQLite in-memory connection while unlocked.
-4. Atomic authenticated encrypted checkpoints after successful mutations, plus crash recovery and backup design. Never depend solely on a final save when locking.
-5. A separate device/recipient cryptographic identity, distinct from the vault master key.
-6. Later: versioned `.bvault` sharing packages, public-key recipient wrapping, Security Centre, durable tamper-evident audit, LAN transfer and optional encrypted relay.
+Desktop dependency warnings and legacy development/optional-lockfile findings remain documented; this is not a claim of zero technical debt or independent security certification. Disposable test resources were removed. Archived release packages and dated sprint/release evidence are preserved.
 
-Independent keys provide cryptographic compartmentalisation, not Qubes-style operating-system isolation. Separate restricted processes are a possible later security enhancement. Do not claim perfect memory erasure, resistance to a compromised unlocked host or rollback protection without an authenticated external baseline.
+## Release acceptance and history
 
-## Immediate work — Sprint 02
+The [candidate validation record](../release/v0.2.0-validation.md) distinguishes local and cross-platform automated evidence from manual OS/credential/GUI acceptance. Current maintenance has local macOS evidence; it does not establish new Windows/Linux packaging or human-present Touch ID acceptance. Public Developer ID signing and notarisation remain outstanding. See the [manual checklist](../release/v0.2.0-manual-acceptance.md).
 
-First complete the native release-app acceptance check in `../sprints/sprint-01/SPRINT_01_DESKTOP_FOUNDATION.md`. Then extract/reuse Rust crypto without Axum/PostgreSQL coupling; document and prototype local vault creation, unlock, lock, independent key ownership, ephemeral metadata, encrypted persistence and crash-safe checkpointing. Preserve and run all existing compatibility tests. Obtain an architecture review before committing to a persistent format. Sharing, LAN, online relay and full file encryption are outside the initial prototype.
+Historical milestones remain in the [Sprint 01 record](../sprints/sprint-01/SPRINT_01_DESKTOP_FOUNDATION.md), [sprint index](../README.md) and [v0.1.0 validation](../release/v0.1.0-validation.md). Their counts and scope do not describe the current application. Shared vectors in `tests/fixtures/crypto-v1.json` and bidirectional compatibility tests remain preserved; desktop and web formats are not interchangeable.
 
-## Development commands
+## Development
 
-From repository root:
+From the repository root (`/Users/richy/Documents/Github/cyber-work/black-vault` on the development Mac):
 
 ```bash
-cd desktop
-npm ci
-npm run desktop:dev
-npm test
-npm run typecheck
-npm run build
-npm run test:rust
-npm run desktop:build
+./start.sh       # Compiled macOS application
+./start.sh dev   # Explicit native development mode
 ```
 
-Legacy regression suites: `(cd backend && cargo test --locked)` and `(cd frontend && npm test)`. Database tests require the original disposable PostgreSQL prerequisites. Never run the opt-in live API test against production.
-
-**Engineering:** UK English; no automatic commit or push; never commit secrets; do not weaken tests or crypto to satisfy a build. See `AGENTS.md`, `../architecture/DESKTOP_SECURITY_ARCHITECTURE.md` and `../sprints/sprint-01/SPRINT_01_DESKTOP_FOUNDATION.md`.
+Use the [desktop guide](../../desktop/README.md) for build/test commands and prerequisites. Legacy database/API tests require disposable PostgreSQL and must not target production. Engineering rules are in [AGENTS.md](../AGENTS.md).

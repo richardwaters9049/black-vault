@@ -1,36 +1,29 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Legacy Black Vault frontend
 
-## Getting Started
+This Next.js application is a preserved web-era reference implementation. The active [desktop application](../desktop/README.md) runs offline and does not depend on this frontend, accounts or an API. Source paths remain stable for historical documentation and cryptographic compatibility tests; see the [legacy boundary](../legacy/README.md).
 
-First, run the development server:
+## Local maintenance
+
+From `frontend/`, install the locked dependencies with `npm ci`. Development uses `npm run dev`; the API base URL is configured through `NEXT_PUBLIC_API_URL`. The Docker development stack is started from the repository root with `./legacy/start.sh start` and exposes ports only on loopback.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npx tsc --noEmit
+npm run lint
+npm test
+npm run build
+npm audit --omit=dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The optional file API integration test requires a running legacy backend and migrated disposable database:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+BLACK_VAULT_TEST_API=http://127.0.0.1:8080 npm test
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+It creates a disposable account and exercises encrypted file persistence, download and browser decryption. Delete the disposable database after verification.
 
-## Learn More
+## Authentication and errors
 
-To learn more about Next.js, take a look at the following resources:
+The browser auth store supplies a stable server snapshot, validates persisted token/user records, handles denied storage access and synchronises storage events. Logout clears in-memory state even when storage is unavailable. This remains the legacy browser-token model; desktop authentication stays native. API errors retain HTTP status and use bounded messages for malformed JSON, network failures and aborted requests.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Next.js and its ESLint configuration are aligned at 16.3.8. The [4 October audit](../docs/engineering/CODEBASE_AUDIT_2026-10-04.md) records verification and the remaining development-only ESLint dependency findings.

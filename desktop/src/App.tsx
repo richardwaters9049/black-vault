@@ -1,8 +1,7 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion, type Variants } from 'framer-motion';
 import { Check, ChevronDown, ContactRound, File, FileLock2, FolderOpen, HardDrive, LayoutDashboard, LockKeyhole, FilePlus2, Lock, LockOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import VaultWorkspace from '@/components/VaultWorkspace';
 import VaultFiles from '@/components/VaultFiles';
 import VaultFileEditor from '@/components/VaultFileEditor';
 import ExampleFiles from '@/components/ExampleFiles';
@@ -10,6 +9,7 @@ import VaultAccess from '@/components/VaultAccess';
 import SplashScreen from '@/components/SplashScreen';
 import VaultMark from '@/components/VaultMark';
 import DashboardOverview from '@/components/DashboardOverview';
+import { useOperationScope } from '@/lib/useOperationScope';
 import { DEFAULT_IDLE_MS, hasSessionExpired } from '@/lib/sessionTimeout';
 import { errorMessage, native, type DesktopInfo, type VaultSummary, type VaultFile, type NestedVaultSummary } from '@/lib/native';
 
@@ -47,6 +47,7 @@ export default function App() {
 
   function navigateTo(nextPage: 'overview' | 'encrypt' | 'decrypt' | 'nested' | 'contacts') {
     if (nextPage === page) return;
+    closeNested();
     setPage(nextPage);
   }
   const [storedFiles, setStoredFiles] = useState<VaultFile[]>([]);
@@ -74,6 +75,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const locking = useRef(false);
+  const { start, invalidate } = useOperationScope(session?.id);
 
   useEffect(() => {
     let active = true;
@@ -93,57 +95,66 @@ export default function App() {
     };
   }, []);
 
+  const receiveFiles = useCallback((files: VaultFile[]) => {
+    // One parent list keeps the sidebar, editor and verification view in agreement.
+    setStoredFiles(files);
+    setDecryptedFiles(current => current.filter(file => files.some(item => item.id === file.id)));
+    setChosenDecrypt(current => current && files.some(file => file.id === current.id) ? current : null);
+  }, []);
+
   useEffect(() => {
     if (!session) { setNestedVaults([]); setSelectedNested(null); setNestedContents([]); setNestedPassword(''); setNestedUnlocked(false); setNestedFileContent(''); return; }
     let active = true;
-    Promise.all([native.listNestedVaults(), native.listVaultFiles()])
-      .then(([nested, files]) => {
-        if (!active) return;
-        setNestedVaults(nested);
-        setStoredFiles(files);
-      })
+    native.listNestedVaults().then(items => { if (active && !locking.current) setNestedVaults(items); })
       .catch(reason => { if (active) setNestedError(errorMessage(reason)); });
+    native.listVaultFiles().then(items => { if (active && !locking.current) receiveFiles(items); })
+      .catch(reason => { if (active && !locking.current) { receiveFiles([]); setNestedError(errorMessage(reason)); } });
     return () => { active = false; };
-  }, [session]);
+  }, [session, page, receiveFiles]);
 
   async function lockFiles(event: React.FormEvent) {
     event.preventDefault();
     if (nestedBusy || !lockIds.length || !/^[0-9]{4}$/.test(lockPassword)) {
       setNestedError('Choose exactly four digits (0–9) for the nested vault PIN.'); return;
     }
+    const isCurrent = start();
     setNestedBusy(true); setNestedError('');
     try {
-      await native.lockSelectedFiles(lockName.trim(), lockPassword, lockIds);
-      const [files, nested] = await Promise.all([native.listVaultFiles(), native.listNestedVaults()]);
-      setStoredFiles(files); setNestedVaults(nested); setLockIds([]); setLockName(''); setLockPassword('');
+      const nested = await native.lockSelectedFiles(lockName.trim(), lockPassword, lockIds);
+      if (!isCurrent()) return;
+      setStoredFiles(current => current.filter(file => !lockIds.includes(file.id)));
+      setNestedVaults(current => [...current, nested]); setLockIds([]); setLockName(''); setLockPassword('');
       setChosenDecrypt(null); setDecryptedFiles([]);
       setNotice('Selected files secured in a nested vault with your four-digit PIN.');
-    } catch (reason) { setNestedError(errorMessage(reason)); }
-    finally { setLockPassword(''); setNestedBusy(false); }
+    } catch (reason) { if (isCurrent()) setNestedError(errorMessage(reason)); }
+    finally { if (isCurrent()) { setLockPassword(''); setNestedBusy(false); } }
   }
 
   async function restoreNested() {
     if (!selectedNested || nestedBusy || !nestedPassword) return;
+    const isCurrent = start();
     setNestedBusy(true); setNestedError('');
     try {
-      await native.restoreNestedVault(selectedNested, nestedPassword);
-      const [files, nested] = await Promise.all([native.listVaultFiles(), native.listNestedVaults()]);
-      setStoredFiles(files); setNestedVaults(nested); setNestedContents([]); setNestedUnlocked(false); setNestedFileContent(''); setSelectedNested(null);
+      const files = await native.restoreNestedVault(selectedNested, nestedPassword);
+      if (!isCurrent()) return;
+      setStoredFiles(files); setNestedVaults(current => current.filter(vault => vault.id !== selectedNested)); setNestedContents([]); setNestedUnlocked(false); setNestedFileContent(''); setSelectedNested(null);
       setNotice('Nested vault restored into the parent vault as encrypted files.');
-    } catch (reason) { setNestedError(errorMessage(reason)); }
-    finally { setNestedPassword(''); setNestedBusy(false); }
+    } catch (reason) { if (isCurrent()) setNestedError(errorMessage(reason)); }
+    finally { if (isCurrent()) { setNestedPassword(''); setNestedBusy(false); } }
   }
 
   async function unlockNested(event: React.FormEvent) {
     event.preventDefault();
     if (!selectedNested || nestedBusy || !nestedPassword) return;
+    const isCurrent = start();
     setNestedBusy(true); setNestedError(''); setNestedContents([]); setNestedUnlocked(false);
     try {
       const contents = await native.unlockNestedVault(selectedNested, nestedPassword);
+      if (!isCurrent()) return;
       setNestedContents(contents); setNestedUnlocked(true); setNestedPassword('');
       setNotice('Nested vault authenticated. Its files remain sealed inside the nested vault.');
-    } catch (reason) { setNestedError(errorMessage(reason)); }
-    finally { setNestedPassword(''); setNestedBusy(false); }
+    } catch (reason) { if (isCurrent()) setNestedError(errorMessage(reason)); }
+    finally { if (isCurrent()) { setNestedPassword(''); setNestedBusy(false); } }
   }
 
   async function createNestedFile(event: React.FormEvent) {
@@ -153,31 +164,37 @@ export default function App() {
     if (!nestedFileName.trim() || /[\\/\x00-\x1f]/.test(nestedFileName) || nestedFileName === '.' || nestedFileName === '..') {
       setNestedError('Enter a valid filename.'); return;
     }
+    const isCurrent = start();
     setNestedBusy(true); setNestedError('');
     try {
       const files = await native.createNestedTextFile(selectedNested, nestedPassword, name, nestedFileContent);
+      if (!isCurrent()) return;
       setNestedContents(files); setNestedFileName(''); setNestedFileContent(''); setSelectedProtectedFile(null); setNestedEditing(false);
       setNotice('New file encrypted directly inside the nested vault.');
-    } catch (reason) { setNestedError(errorMessage(reason)); }
-    finally { setNestedBusy(false); setNestedPassword(''); }
+    } catch (reason) { if (isCurrent()) setNestedError(errorMessage(reason)); }
+    finally { if (isCurrent()) { setNestedBusy(false); setNestedPassword(''); } }
   }
 
   async function moveParentToNested(event: React.FormEvent) {
     event.preventDefault();
     if (!selectedNested || !nestedUnlocked || !parentTransferId || nestedBusy || !/^[0-9]{4}$/.test(nestedPassword)) return;
+    const isCurrent = start();
     setNestedBusy(true); setNestedError('');
     try {
       const updated = await native.transferParentFileToNested(selectedNested, nestedPassword, parentTransferId);
-      setNestedContents(updated); setStoredFiles(await native.listVaultFiles());
+      if (!isCurrent()) return;
+      setNestedContents(updated); setStoredFiles(current => current.filter(file => file.id !== parentTransferId));
+      setDecryptedFiles(current => current.filter(file => file.id !== parentTransferId)); setChosenDecrypt(null);
       setParentTransferId(''); setLockIds(previous => previous.filter(id => id !== parentTransferId));
       setNotice('Encrypted file transferred into the nested vault. No plaintext was exported.');
-    } catch (reason) { setNestedError(errorMessage(reason)); }
-    finally { setNestedPassword(''); setNestedBusy(false); }
+    } catch (reason) { if (isCurrent()) setNestedError(errorMessage(reason)); }
+    finally { if (isCurrent()) { setNestedPassword(''); setNestedBusy(false); } }
   }
 
   const selectedProtected = nestedContents.find(file => file.id === selectedProtectedFile) ?? null;
 
   function selectProtected(file: VaultFile) {
+    invalidate();
     setSelectedProtectedFile(file.id); setNestedEditing(false); setNestedDeleteConfirm(false);
     setNestedFileName(file.name.replace(/\.[^.]+$/, ''));
     setNestedFileType(file.name.split('.').pop()?.toLowerCase() ?? 'txt');
@@ -186,43 +203,63 @@ export default function App() {
 
   async function readProtected() {
     if (!selectedNested || !selectedProtected || !/^[0-9]{4}$/.test(nestedPassword) || nestedBusy) return;
+    const isCurrent = start();
     setNestedBusy(true); setNestedError('');
     try {
       const content = await native.readNestedTextFile(selectedNested, nestedPassword, selectedProtected.id);
+      if (!isCurrent()) return;
       setNestedFileContent(content); setNestedEditing(true);
       setNotice('Authenticated document opened in the session editor.');
-    } catch (reason) { setNestedError(errorMessage(reason)); }
-    finally { setNestedPassword(''); setNestedBusy(false); }
+    } catch (reason) { if (isCurrent()) setNestedError(errorMessage(reason)); }
+    finally { if (isCurrent()) { setNestedPassword(''); setNestedBusy(false); } }
   }
 
   async function manageProtected(action: 'edit' | 'delete' | 'transfer_to_parent') {
     if (!selectedNested || !selectedProtected || !/^[0-9]{4}$/.test(nestedPassword) || nestedBusy) return;
     if (action === 'delete' && !nestedDeleteConfirm) { setNestedDeleteConfirm(true); return; }
+    const isCurrent = start();
     setNestedBusy(true); setNestedError('');
     try {
       const updated = await native.manageNestedFile(selectedNested, nestedPassword, selectedProtected.id, action,
         action === 'edit' ? nestedFileName.trim() + '.' + nestedFileType : undefined,
         action === 'edit' ? nestedFileContent : undefined);
+      if (!isCurrent()) return;
       setNestedContents(updated);
-      if (action === 'transfer_to_parent') setStoredFiles(await native.listVaultFiles());
+      if (action === 'transfer_to_parent') {
+        // The transfer committed; a failed refresh must not invite repeating it.
+        try {
+          const files = await native.listVaultFiles();
+          if (!isCurrent()) return;
+          setStoredFiles(files);
+        } catch (reason) {
+          if (!isCurrent()) return;
+          setStoredFiles([]);
+          setNestedError('File transferred, but the parent list could not be refreshed. Reopen Decryption to reload it. ' + errorMessage(reason));
+        }
+      }
       setSelectedProtectedFile(null); setNestedEditing(false); setNestedDeleteConfirm(false); setNestedFileContent(''); setNestedFileName('');
       setNotice(action === 'edit' ? 'Protected document re-encrypted and updated.' : action === 'delete' ? 'Protected file permanently deleted.' : 'Encrypted file transferred to the parent vault.');
-    } catch (reason) { setNestedError(errorMessage(reason)); }
-    finally { setNestedPassword(''); setNestedBusy(false); }
+    } catch (reason) { if (isCurrent()) setNestedError(errorMessage(reason)); }
+    finally { if (isCurrent()) { setNestedPassword(''); setNestedBusy(false); } }
   }
 
   function closeNested() {
+    invalidate(); setNestedBusy(false);
     setNestedUnlocked(false); setNestedContents([]); setNestedPassword(''); setNestedFileName(''); setNestedFileContent(''); setNestedError(''); setSelectedProtectedFile(null); setNestedEditing(false); setNestedDeleteConfirm(false); setParentTransferId('');
   }
 
   async function signOut() {
     if (locking.current) return;
     locking.current = true;
+    closeNested(); setStoredFiles([]); setDecryptedFiles([]); setLockIds([]); setLockName(''); setLockPassword(''); setChosenDecrypt(null); setChosenExample(null);
     setBusy(true); setError('');
     try {
       await native.lockVault();
       setSession(null); setStoredFiles([]); setDecryptedFiles([]); setNestedContents([]); setNestedUnlocked(false); setNestedFileContent(''); setSelectedNested(null); setLockPassword(''); setNestedPassword(''); setNotice('');
-    } catch (reason) { setError(errorMessage(reason)); }
+    } catch (reason) {
+      setError(errorMessage(reason));
+      setSession(current => current ? { ...current } : null);
+    }
     finally { setBusy(false); locking.current = false; }
   }
 
@@ -324,7 +361,7 @@ export default function App() {
         {session && <Button variant="outline" disabled={busy} onClick={() => void signOut()}><LockKeyhole size={14} />{busy ? 'Locking…' : 'Lock vault'}</Button>}
       </motion.header>
 
-      <AnimatePresence mode={motionDisabled ? "sync" : "wait"} initial={false}>
+      <AnimatePresence key={busy ? 'locking' : session?.id ?? 'locked'} mode={motionDisabled ? "sync" : "wait"} initial={false}>
         <motion.div
           key={`${page}-${booting ? 'booting' : 'ready'}`}
           initial={false}
@@ -346,8 +383,8 @@ export default function App() {
           <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Choose or drop one file. Black Vault scans it with the local policy gate, encrypts it natively and stores only the encrypted vault copy.</p>
         </motion.div>
         <motion.div variants={pageItem}>
-          {session
-            ? <section className="mt-6 rounded-xl border border-border bg-card p-5 sm:p-7"><VaultFiles operation="encrypt" key={'encrypt-' + nestedVaults.length} vaultId={session.id} chosenExample={chosenExample} onFilesChange={setStoredFiles} /></section>
+          {busy ? <p role="status" className="mt-6 text-xs text-slate-400">Locking vault…</p> : session
+            ? <section className="mt-6 rounded-xl border border-border bg-card p-5 sm:p-7"><VaultFiles operation="encrypt" key={'encrypt-' + nestedVaults.length} vaultId={session.id} vaultFiles={storedFiles} chosenExample={chosenExample} onFilesChange={receiveFiles} /></section>
             : <VaultAccess onAuthenticated={vault => enterDashboard(vault, 'encrypt')} />}
         </motion.div>
       </motion.div>}
@@ -364,13 +401,13 @@ export default function App() {
           <p className="mt-2 max-w-xl text-xs leading-6 text-slate-400">Select an encrypted vault file. Authentication and decryption happen in native memory; the encrypted original remains in the vault.</p>
         </motion.div>
         <motion.div variants={pageItem}>
-          {session
-            ? <section className="mt-6 rounded-xl border border-border bg-card p-5 sm:p-7"><VaultFiles operation="decrypt" key={'decrypt-' + nestedVaults.length} vaultId={session.id} chosenDecrypt={chosenDecrypt} onFilesChange={setStoredFiles} onDecryptedChange={setDecryptedFiles} /></section>
+          {busy ? <p role="status" className="mt-6 text-xs text-slate-400">Locking vault…</p> : session
+            ? <section className="mt-6 rounded-xl border border-border bg-card p-5 sm:p-7"><VaultFiles operation="decrypt" key={'decrypt-' + nestedVaults.length} vaultId={session.id} vaultFiles={storedFiles} chosenDecrypt={chosenDecrypt} onFilesChange={receiveFiles} onDecryptedChange={setDecryptedFiles} /></section>
             : <VaultAccess onAuthenticated={enterDashboard} />}
         </motion.div>
       </motion.div>}
       {page === 'contacts' && <Suspense fallback={<div className="pt-8 text-xs text-slate-500">Loading trusted contacts…</div>}><TrustedContacts /></Suspense>}
-      {page === 'decrypt' && session && <motion.section
+      {page === 'decrypt' && session && !busy && <motion.section
         className="mt-6 border-t border-border pt-6"
         variants={pageItem}
         custom={0.16}
@@ -380,9 +417,9 @@ export default function App() {
         <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-sky-400">Authenticated vault workspace</p>
         <h2 className="text-lg font-medium">Open, examine and edit protected documents</h2>
         <p className="mt-2 max-w-2xl text-xs leading-6 text-slate-400">Supported text documents are decrypted only into the active session editor. Saving re-encrypts the document into the vault; no plaintext working copy is written to disk.</p>
-        <VaultFileEditor key={nestedVaults.length} vaultId={session.id} onFilesChange={setStoredFiles}/>
+        <VaultFileEditor key={nestedVaults.length} vaultId={session.id} files={storedFiles} onFilesChange={receiveFiles}/>
       </motion.section>}
-      {page === 'nested' && session && selectedNested && <section key={selectedNested} className="bv-page-enter pt-6">
+      {page === 'nested' && session && !busy && selectedNested && <section key={selectedNested} className="bv-page-enter pt-6">
         <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-sky-400">Compartmentalised workspace</p>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><h1 className="flex items-center gap-3 text-2xl font-medium tracking-tight sm:text-3xl"><LockKeyhole className="text-sky-300"/> Vault {selectedNested.slice(0, 8)}</h1>
@@ -398,7 +435,7 @@ export default function App() {
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="flex items-center gap-2 text-sm font-medium"><FolderOpen size={16} className="text-sky-300"/> Protected files <span className="ml-auto font-mono text-xs text-slate-500">{nestedContents.length}/5</span></h2>
             <p className="mt-2 text-xs text-slate-400">These encrypted envelopes are stored inside this compartment, not alongside parent-vault files.</p>
-            <div className="mt-4 space-y-2">{nestedContents.map(file => <button type="button" key={file.id} onClick={() => selectProtected(file)} aria-pressed={selectedProtectedFile === file.id} className={"bv-premium-enter flex w-full items-center gap-3 rounded-lg border p-3 text-left text-xs transition-colors " + (selectedProtectedFile === file.id ? 'border-sky-400/50 bg-sky-400/10 text-sky-100' : 'border-border bg-background hover:border-sky-400/30')}><Lock size={14} className="shrink-0 text-sky-300"/><span className="min-w-0 flex-1 break-all">{file.name}</span><span className="shrink-0 font-mono text-slate-500">{(file.sizeBytes / 1024).toFixed(1)} KiB</span></button>)}</div>
+            <div className="mt-4 space-y-2">{nestedContents.map(file => <button type="button" key={file.id} disabled={nestedBusy} onClick={() => selectProtected(file)} aria-pressed={selectedProtectedFile === file.id} className={"bv-premium-enter flex w-full items-center gap-3 rounded-lg border p-3 text-left text-xs transition-colors " + (selectedProtectedFile === file.id ? 'border-sky-400/50 bg-sky-400/10 text-sky-100' : 'border-border bg-background hover:border-sky-400/30')}><Lock size={14} className="shrink-0 text-sky-300"/><span className="min-w-0 flex-1 break-all">{file.name}</span><span className="shrink-0 font-mono text-slate-500">{(file.sizeBytes / 1024).toFixed(1)} KiB</span></button>)}</div>
             {nestedContents.length === 0 && <p className="mt-5 text-xs text-slate-500">No files in this compartment yet.</p>}
             <form onSubmit={event => void moveParentToNested(event)} className="mt-6 space-y-3 border-t border-border pt-5">
               <h3 className="text-xs font-medium text-sky-300">Move from parent vault</h3>
@@ -410,7 +447,7 @@ export default function App() {
               <input aria-label="PIN to move parent file" type="password" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" placeholder="Confirm 4-digit PIN" value={nestedPassword} onChange={event => setNestedPassword(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="w-full rounded-lg border border-border bg-background p-3 text-xs tracking-[0.25em]"/>
               <Button type="submit" variant="outline" disabled={nestedBusy || nestedContents.length >= 5 || !parentTransferId || !/^[0-9]{4}$/.test(nestedPassword)}>Move encrypted file into vault</Button>
             </form>
-            <p className="mt-5 text-[11px] leading-5 text-slate-500">To restore all files to the parent vault, lock this compartment and use the restore control in My Vault. No plaintext export is required.</p>
+            <p className="mt-5 text-[11px] leading-5 text-slate-500">To restore all files to the parent vault, lock this compartment and use the restore control in Decryption. No plaintext export is required.</p>
           </div>
           <div className="rounded-xl border border-border bg-card p-5">
             {selectedProtected ? <div className="space-y-4">
@@ -432,7 +469,7 @@ export default function App() {
                 {nestedEditing && <Button type="button" disabled={nestedBusy || !nestedFileName.trim() || !/^[0-9]{4}$/.test(nestedPassword)} onClick={() => void manageProtected('edit')}>Save encrypted changes</Button>}
                 <Button type="button" variant="outline" disabled={nestedBusy || !/^[0-9]{4}$/.test(nestedPassword)} onClick={() => void manageProtected('transfer_to_parent')}>Move to parent</Button>
                 <Button type="button" variant="outline" disabled={nestedBusy || !/^[0-9]{4}$/.test(nestedPassword)} onClick={() => void manageProtected('delete')}>{nestedDeleteConfirm ? 'Confirm permanent delete' : 'Delete file'}</Button>
-                <Button type="button" variant="outline" onClick={() => { setSelectedProtectedFile(null); setNestedEditing(false); setNestedFileContent(''); setNestedPassword(''); setNestedDeleteConfirm(false); }}>Close details</Button>
+                <Button type="button" variant="outline" onClick={() => { invalidate(); setNestedBusy(false); setSelectedProtectedFile(null); setNestedEditing(false); setNestedFileName(''); setNestedFileContent(''); setNestedPassword(''); setNestedDeleteConfirm(false); }}>Close details</Button>
               </div>
             </div> : <form onSubmit={event => void createNestedFile(event)}>
               <h2 className="flex items-center gap-2 text-sm font-medium"><FilePlus2 size={16} className="text-sky-300"/> Create inside this vault</h2>
@@ -449,7 +486,7 @@ export default function App() {
         </div>}
         {nestedError && <p role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/5 p-3 text-xs text-red-300">{nestedError}</p>}
       </section>}
-      {page === 'decrypt' && session && <motion.div
+      {page === 'decrypt' && session && !busy && <motion.div
         className="mt-6 border-t border-border pt-6"
         variants={pageItem}
         custom={0.24}
@@ -503,7 +540,6 @@ export default function App() {
           {nestedContents.length > 0 && <div className="bv-premium-enter mt-4 space-y-2">{nestedContents.map(file => <p key={file.id} className="rounded-lg border border-border p-3 text-xs">{file.name}</p>)}</div>}
         </section>}
         {nestedError && <p role="alert" className="mt-3 text-xs text-red-300">{nestedError}</p>}
-        <VaultWorkspace ready={Boolean(info)} onLocked={() => { setStoredFiles([]); setDecryptedFiles([]); setSession(null); }} />
       </motion.div>}
         </motion.div>
       </AnimatePresence>

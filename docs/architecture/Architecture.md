@@ -41,7 +41,9 @@ Writes use narrow staging names, synchronisation and rename. Unix restrictive mo
 
 Overview and public contacts can be displayed without a root session. Protected file inventory and operations require successful native vault authentication. Passwords are never prefilled. The splash centres the symbol and title as one layout group; operation panels own their motion and respect reduced motion.
 
-Startup, explicit locking and five-minute inactivity remove the native session. Delayed timers/focus use wall-clock expiry; this is not a native sleep hook. Root secrets stay native; authorised text editing displays plaintext in WebView memory and saving re-encrypts it.
+App owns the root session and one shared parent-file list. Editor and operation panels consume that list; a generation guard discards stale responses after closure, vault changes or unmount.
+
+Startup, explicit locking and five-minute inactivity remove the native session. Explicit/inactivity locking immediately closes protected panels and clears drafts, PINs and selections while Rust locks; late list responses cannot restore filenames. A native lock failure remains visible and requires retry, rather than reporting a successful lock. Delayed timers/focus use wall-clock expiry; this is not a native sleep hook. Root secrets stay native; authorised text editing displays plaintext in WebView memory and saving re-encrypts it.
 
 Permanent deletion checks exact typed confirmation and invokes fresh native biometrics when available. Standalone biometric verification is not exposed and biometrics do not unlock encrypted vaults.
 
@@ -50,3 +52,5 @@ Permanent deletion checks exact typed confirmation and invokes fresh native biom
 The Rust crypto/parser foundation supports in-memory signed recipient package round trips and negative/vector tests. Only identity/contact functionality is exposed in the current application. Package file send/receive, replay history and their UI remain future work; local parent/nested transfers are a different implemented feature.
 
 See [security architecture](DESKTOP_SECURITY_ARCHITECTURE.md), [threat model](../security/THREAT_MODEL.md), [transfer status](SECURE_SHARING_IMPLEMENTATION_PLAN.md) and [candidate evidence](../release/v0.2.0-validation.md).
+
+The [4 October maintenance audit](../engineering/CODEBASE_AUDIT_2026-10-04.md) records the latest local checks and dependency findings separately from release-candidate evidence.

@@ -131,12 +131,14 @@ mod tests {
         assert_eq!(retrieved.user_id, user_id);
         assert_eq!(retrieved.encrypted_vault_key, "test_encrypted_key");
 
-        sqlx::query!("DELETE FROM vault_keys WHERE user_id = $1", user_id)
+        sqlx::query("DELETE FROM vault_keys WHERE user_id = $1")
+            .bind(user_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up test vault key");
 
-        sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
             .execute(&pool)
             .await
             .expect("Failed to clean up test user");

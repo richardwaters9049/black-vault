@@ -28,7 +28,7 @@ Requires Node.js 22.12+, Rust 1.90+ and native Tauri prerequisites. On macOS, pa
 
 Startup locks any prior Rust session before native initialisation completes. The Overview may display non-sensitive information while locked. Encryption and Decryption require native vault creation/unlock before protected file controls appear. Neither tab prefills a password, including development builds. The UI cannot create a session without a successful Rust authentication response.
 
-Lock/sign-out clears protected UI state after native locking; inactivity requests a lock after five minutes and checks wall-clock expiry after delayed timers or focus changes. This is not a native OS sleep listener.
+Lock/sign-out immediately closes protected views and clears editor drafts, PINs and selections while native locking runs. Late operation and list responses cannot restore those views. Native failure is reported and requires retry; the UI does not claim that key material was dropped until Rust confirms locking. Inactivity requests a lock after five minutes; it checks wall-clock expiry after delayed timers or focus changes. This is not a native OS sleep listener.
 
 Touch ID is confined to native confirmation of permanent vault deletion when available. It does not unlock a vault or recover a password. There is no standalone biometric-success IPC command. See the [biometric security model](../docs/security/BIOMETRIC_SECURITY_MODEL.md).
 
@@ -70,3 +70,9 @@ The [candidate manual checklist](../docs/release/v0.2.0-manual-acceptance.md) co
 - [Desktop security architecture](../docs/architecture/DESKTOP_SECURITY_ARCHITECTURE.md)
 - [Threat model](../docs/security/THREAT_MODEL.md)
 - [Historical v0.1.0 record](../docs/release/v0.1.0-validation.md)
+
+## Source organisation
+
+`src/App.tsx` owns the root session and shared parent-file list. Components implement individual workspaces; `src/lib/useOperationScope.ts` discards stale asynchronous view responses. Rust vault persistence stays under `src-tauri/src/vault/`, IPC adapters in `commands.rs` and `contact_commands.rs`, and transfer primitives in their existing dedicated modules.
+
+The original packaging artwork is kept in [assets](assets/README.md); generated native icons remain under `src-tauri/icons/`. See the [4 October codebase audit](../docs/engineering/CODEBASE_AUDIT_2026-10-04.md) for changes, local verification and outstanding dependency findings.

@@ -38,12 +38,7 @@ launch_desktop() {
 main() {
     case "${1:-start}" in
         start|black-v-start)
-            if [[ -s "$DESKTOP_ROOT/.env.development.local" ]]; then
-                success "Local development configuration detected; starting development app."
-                desktop_npm desktop:dev
-            else
-                launch_desktop
-            fi
+            launch_desktop
             ;;
         release) launch_desktop ;;
         dev) desktop_npm desktop:dev ;;

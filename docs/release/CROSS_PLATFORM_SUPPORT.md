@@ -4,9 +4,9 @@
 
 | Platform | Historical v0.1.0 evidence | Current candidate evidence | Current hands-on acceptance |
 | --- | --- | --- | --- |
-| macOS arm64 | CI/DMG and packaged GUI passed | Local gate, Keychain and app build/signature passed; release CI pending | Pending current-candidate walkthrough |
-| Windows x64 | CI tests/NSIS passed | Release CI/credential acceptance pending | Not claimed |
-| Linux x64 | CI tests/AppImage/DEB passed | Release CI pending; Secret Service requires an active desktop session | Not claimed |
+| macOS arm64 | CI/DMG and packaged GUI passed | Local gate/Keychain/app signature passed; CI DMG passed | Pending current-candidate walkthrough |
+| Windows x64 | CI tests/NSIS passed | CI tests, Credential Manager acceptance and NSIS passed | Not claimed |
+| Linux x64 | CI tests/AppImage/DEB passed | CI tests/AppImage/DEB passed; Secret Service desktop acceptance pending | Not claimed |
 
 The previous release remains documented in [v0.1.0 validation](v0.1.0-validation.md). Current results live in [v0.2.0 validation](v0.2.0-validation.md), with a [manual acceptance checklist](v0.2.0-manual-acceptance.md). Historical results do not automatically validate newer code.
 

@@ -12,6 +12,7 @@
 
 ## Candidate and final sprints
 
+- [v0.2.0 release-candidate notes](release/RELEASE_0.2.0_RC1.md)
 - [v0.2.0 validation and promotion status](release/v0.2.0-validation.md)
 - [Current packaged-app manual acceptance](release/v0.2.0-manual-acceptance.md)
 - [Cross-platform support and CI policy](release/CROSS_PLATFORM_SUPPORT.md)

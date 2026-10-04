@@ -2,6 +2,8 @@
 
 **Date:** 4 October 2026. **Candidate:** 0.2.0-rc.1.
 
+**Engineering status:** complete; local and cross-platform gates passed. Current-candidate hands-on acceptance remains pending.
+
 ## Engineering work
 
 - Updated root/desktop README, current architecture, threat model and biometric model.

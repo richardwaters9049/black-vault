@@ -27,7 +27,6 @@ beforeEach(async () => {
   mockIPC((command, args) => {
     if (command === 'get_desktop_info') return { appName: 'Black Vault', version: '0.1.0', platform: 'macos', architecture: 'aarch64' };
     if (command === 'get_biometric_status') return { available: true, kind: 'touch_id', platform: 'macos' };
-    if (command === 'authenticate_biometric') return { authenticated: true };
     if (command === 'delete_locked_vault') { deletedVaults += 1; vaults = vaults.filter(vault => vault.id !== String((args as { vaultId: string }).vaultId)); return null; }
     if (command === 'lock_vault') {
       locks += 1;
@@ -159,4 +158,13 @@ it('starts both operation tabs with an empty password even with a development pa
     expect(password?.value).toBe('');
     expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
   }
+});
+
+
+it('does not offer biometric verification as a substitute for vault unlock', async () => {
+  await ready();
+  await click('Decryption');
+  expect(host.textContent).not.toContain('Verify Touch ID');
+  expect(host.textContent).toContain('Your password unlocks the vault.');
+  expect(host.querySelector<HTMLInputElement>('input[aria-label="Vault password"]')).not.toBeNull();
 });

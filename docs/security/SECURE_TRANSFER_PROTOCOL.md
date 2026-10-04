@@ -1,5 +1,7 @@
 # Black Vault Secure Transfer Protocol
 
+> Current status (4 October 2026): Rust in-memory encryption/signature/parser foundations and identity/contact management exist. This specification also includes future requirements. End-user package send/receive, durable replay tracking and the received-vault UI are excluded from 0.2.0-rc.1. See [implementation status](../architecture/SECURE_SHARING_IMPLEMENTATION_PLAN.md).
+
 Updated: 2 October 2026  
 Status: design specification — not yet implemented
 

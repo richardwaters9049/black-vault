@@ -1,85 +1,49 @@
 # Black Vault — Desktop Security Architecture
 
-**Updated:** 1 October 2026
-**Status:** As-built security architecture for Black Vault 0.1.0.
+**Updated:** 4 October 2026. **Scope:** 0.2.0-rc.1 internal desktop candidate.
 
-## Security objectives
+## Objectives and boundaries
 
-Black Vault protects locally persisted vault metadata, filenames and file contents against offline inspection and unauthorised modification while a vault is locked. It minimises plaintext persistence, keeps privileged filesystem operations behind Rust/Tauri, and fails closed when authenticated encrypted records are malformed or tampered with.
+Authenticated encryption protects local vault names, filenames and contents against offline inspection and unauthorised modification. Rust controls keys, root/nested authentication, authorised paths, import policy, persistence and recovery. React controls presentation and receives authorised metadata or text only for an active operation.
 
-It does **not** claim protection against a compromised host while unlocked, administrator-level memory inspection, guaranteed erasure from every OS-managed memory copy, physical power-loss durability on every filesystem, rollback detection without an independent trusted baseline, forgotten-password recovery, or independent security certification.
-
-## Trust boundaries
-
-### React/WebView
-
-The WebView is presentation rather than the cryptographic authority. It requests operations through Tauri commands and receives authorised metadata/plaintext only when required for the current unlocked workflow. It does not receive vault master keys or arbitrary native filesystem authority.
-
-The production CSP permits only the local application origin and Tauri IPC connection required by the runtime. Capabilities are scoped to the `main` window. Shell/process execution is not exposed.
-
-### Rust/Tauri core
-
-Rust owns vault sessions, cryptographic operations, native filesystem access, import screening and persistence/recovery. Password arguments are wrapped in zeroising buffers at the command/storage boundary. Active vault names and master keys use `Zeroizing` containers where practical.
-
-Error messages are intentionally bounded so internal paths, keys and low-level storage details are not returned to the WebView.
-
-### Local filesystem
-
-The filesystem is treated as attacker-readable and attacker-modifiable while the vault is locked. Sensitive persistent values therefore require authenticated encryption. An attacker may still delete or roll back encrypted files; AES-GCM authenticity alone cannot prove freshness.
+The production CSP permits local application resources and Tauri IPC. Capabilities apply to the local `main` window; command permissions do not grant a generic filesystem, HTTP or shell interface. Password arguments and active secrets use best-effort zeroising native buffers. Authorised editor text necessarily exists in WebView memory.
 
 ## Key hierarchy
 
-```text
-Master password
-      │
-      ▼
-Argon2id (19,456 KiB, 2 iterations, parallelism 1)
-      │ 16-byte random salt
-      ▼
-256-bit wrapping key
-      │
-      ├── authenticated encrypted vault metadata
-      └── wraps random 256-bit vault master key
-                              │
-                              ▼
-                  per-file authenticated encryption
-                  encrypted filename + contents
-```
+Argon2id v19 uses 19,456 KiB, two iterations, parallelism one, a random 16-byte salt and a 32-byte output. Its wrapping key protects a randomly generated 256-bit vault master key and vault metadata. Header KDF/version bounds are validated before expensive processing.
 
-The vault-header KDF record is versioned and validated before expensive derivation. Unsupported parameters fail closed. AES-GCM uses fresh random 96-bit nonces and contextual associated data.
+Files receive independent random data-encryption keys. AES-256-GCM uses fresh random 96-bit nonces and domain-separated vault/file context in associated data. Wrong-key, tamper and cross-vault substitution tests enforce authentication.
 
-File ciphertext is bound to its vault and file identifiers. Tests verify wrong keys, tampering and cross-vault ciphertext substitution fail authentication.
+Nested records require the parent master key and a separately derived four-digit PIN key. In-session attempt throttling reduces repeated attempts; the PIN remains low entropy and its cooldown is not durable across all restarts.
 
-## Nested vaults
+## Files and durability
 
-Nested vaults add a second local authentication boundary inside an unlocked parent vault. A four-digit PIN is processed with Argon2id, and the nested payload is additionally protected by the parent vault master key. Opening it therefore requires an unlocked parent and the correct PIN.
+Picker/drop selection is staged natively, then revalidated and bounded in Rust. Local imports are limited to 5 MiB. Unix regular-file/no-follow helpers reject symlinks, with restrictive storage modes where supported. Windows portable filesystem behaviour does not imply Unix permission or reparse-point guarantees.
 
-Repeated incorrect PIN attempts are throttled in the active session, and all PIN-authenticated nested operations use the same attempt controls. A four-digit PIN is a convenience boundary, not equivalent to a high-entropy master password.
+Screening operates on the exact bytes subsequently encrypted. It rejects bounded executable/script/archive/signature indicators; it is not antivirus. Text saves re-encrypt into the vault without a plaintext working file. Explicit exports authenticate first and create a plaintext destination without unsafe overwrite.
 
-## File handling
+Sensitive writes use narrow temporary names, file synchronisation, rename and directory synchronisation. Recovery authenticates known encrypted staging data and favours recoverable duplicate ciphertext over losing the only valid copy. Fault-injection and subprocess-interruption tests exercise ordering, not guaranteed physical power-loss durability on every device/filesystem.
 
-Imports are read through bounded regular-file helpers. On Unix, no-follow opening rejects symlinks and metadata is checked after opening. Vault headers use the same hardened read path.
+## Authentication and destruction
 
-The offline import scanner blocks high-confidence executable/script/container indicators, macro-capable extensions, the EICAR test signature and a small set of high-risk command patterns. It is a policy gate, **not antivirus**, malware detection or a safety verdict.
+Only successful Rust password authentication creates a root session. The locked Overview is not a security boundary; protected file commands independently require the native session. Startup, explicit lock and five-minute inactivity release the active root key. Delayed-timer/focus checks are not native sleep interception.
 
-The current plaintext import limit is 5 MiB. Exports authenticate encrypted data before producing plaintext and refuse unsafe overwrites. Decrypt-in-vault verification does not create a plaintext copy in vault storage.
+Permanent locked-vault deletion requires exact typed confirmation and fresh native biometrics when available. Cancellation, failed preflight, false success and timeout abort. Unavailable biometrics leave the typed-confirmation policy. The standalone biometric IPC command is removed; Touch ID cannot unlock vault master keys. See the [biometric model](../security/BIOMETRIC_SECURITY_MODEL.md).
 
-## Persistence and recovery
+## Identities and contacts
 
-New and updated encrypted records use create-new temporary files where applicable, `sync_all`, rename and directory synchronisation. Unix files/directories receive restrictive modes where supported.
+Independent X25519 recipient and Ed25519 signing private material is held in a versioned binary credential through macOS Keychain, Windows Credential Manager or Linux Secret Service. Missing credentials may initialise an identity; malformed or unavailable storage fails rather than silently replacing an identity or storing plaintext. These keys are not claimed to be Secure Enclave-backed or non-exportable. Rust rotation functionality is not exposed as a completed UI feature.
 
-Nested transfer and restore operations use explicit persistence ordering. If interrupted, the design prefers recoverable duplicate ciphertext over losing the only authenticated copy. Recovery recognises narrowly defined staging files and validates corresponding encrypted state before cleanup.
+The UI receives public documents and fingerprints. Imports start unverified; explicit exact fingerprint comparison establishes verified state. Changed keys lose verification; revoked contacts do not silently regain trust on reimport. Contact updates persist a candidate before replacing live state.
 
-The Rust suite includes fault matrices and a real subprocess interruption matrix around these boundaries.
+Contacts contain public names, keys and trust history in versioned JSON outside vault encryption. Strict parsing, bounded regular-file reads, atomic persistence and restrictive Unix modes do **not** authenticate a valid malicious replacement of that JSON. Contact metadata privacy, durable rollback protection and an authenticated contact trust store are outside current guarantees. Reverify through an independent channel after restoring/replacing contact state.
 
-## Session lifecycle
+## Transfer implementation status
 
-Only one root vault is active at a time. Explicit lock/sign-out and five minutes of inactivity clear the active session. Master-key material is held in best-effort-zeroising Rust containers and is never exposed through the JavaScript API.
+The Rust-only foundation implements HPKE recipient encryption, mandatory Ed25519 signatures, version/suite binding, bounded canonical decoding and negative/RFC-vector tests. It does not provide a complete send/receive application. File package persistence, replay history, received-vault UI and cross-platform package workflow acceptance are deferred. See the [transfer status](SECURE_SHARING_IMPLEMENTATION_PLAN.md).
 
-Zeroisation reduces accidental retention; it is not a guarantee against compiler, allocator, swap, crash-dump or hostile-process copies.
+## Verification and limitations
 
-## Security verification
+Current results are dated in the [candidate record](../release/v0.2.0-validation.md); historical 46 Rust/22 frontend counts belong to v0.1.0. Dependency audit warnings remain recorded, including Linux GTK/Tauri unsoundness/unmaintained dependencies and a yanked crate.
 
-The hardened baseline includes 46 Rust tests, 22 frontend tests, strict Clippy/Rustfmt verification, a production TypeScript/Vite build, production-bundle development-secret checks, `npm audit` with zero known vulnerabilities, and RustSec `cargo audit` with zero vulnerability advisories at the final audit.
-
-See [Threat Model](../security/THREAT_MODEL.md) and [v0.1.0 Validation](../release/v0.1.0-validation.md).
+There is no forgotten-password recovery, all-state rollback protection, independent security certification, notarised public distribution, guaranteed memory erasure, or protection from a compromised unlocked host. See the [threat model](../security/THREAT_MODEL.md).

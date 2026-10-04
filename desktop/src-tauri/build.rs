@@ -8,7 +8,6 @@ fn main() {
     tauri_build::try_build(
         attributes.app_manifest(tauri_build::AppManifest::new().commands(&[
             "get_biometric_status",
-            "authenticate_biometric",
             "get_desktop_info",
             "select_file",
             "list_vaults",

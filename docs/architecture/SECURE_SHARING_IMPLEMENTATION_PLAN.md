@@ -1,7 +1,20 @@
 # Secure Sharing Implementation Plan
 
 Updated: 2 October 2026  
-Status: planned
+Status: partially implemented; end-user transfer workflows deferred
+
+## Implementation status — 4 October 2026
+
+| Phase | Current status |
+| --- | --- |
+| A — protocol foundation | Rust in-memory signed recipient packages, bounded parser, RFC vector and negative/corpus tests implemented; fuzz harness exists |
+| B — platform key protection | OS credential abstraction and corruption/failure tests implemented; current platform acceptance recorded separately |
+| C — contacts | Public identity, fingerprint, changed-key and revoked lifecycle UI/IPC implemented |
+| D/E — send/receive | Native package file persistence, package workflow IPC, Received Vaults and replay history not implemented |
+| F — dashboard | Local-vault dashboard/Encryption/Decryption/Contacts implemented; proposed received-vault product model deferred |
+| G — hardening | Local candidate gates recorded; full cross-platform transfer and independent review not claimed |
+
+Contact metadata/trust is currently versioned public JSON, not an authenticated defence against valid attacker-controlled local replacement. A future send/receive workflow needs an explicit trusted-state design and replay baseline. OS identity rotation exists in Rust but is not a finished UI workflow. The phase descriptions below remain requirements where not explicitly implemented.
 
 ## Product model
 

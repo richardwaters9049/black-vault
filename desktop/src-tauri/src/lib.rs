@@ -90,7 +90,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             biometric::get_biometric_status,
-            biometric::authenticate_biometric,
             commands::get_desktop_info,
             commands::select_file,
             commands::list_vaults,

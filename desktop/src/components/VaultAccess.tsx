@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { motion, useReducedMotion, type Variants } from 'framer-motion';
-import { ArrowRight, Eye, EyeOff, Fingerprint, KeyRound, Lock, Plus, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, KeyRound, Lock, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { errorMessage, native, type VaultSummary } from '@/lib/native';
 
@@ -70,21 +70,6 @@ export default function VaultAccess({ onAuthenticated }: { onAuthenticated: (vau
       setConfirmation('');
       setCreating(remaining.length === 0);
       setBiometricMessage('Vault permanently deleted from this device.');
-    } catch (reason) {
-      setError(errorMessage(reason));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function verifyTouchId() {
-    if (busy) return;
-    setBusy(true); setError(''); setBiometricMessage('');
-    try {
-      const result = await native.authenticateBiometric();
-      if (result.authenticated) {
-        setBiometricMessage('Touch ID verified. The vault remains locked until biometric vault access is enrolled.');
-      }
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -167,15 +152,13 @@ export default function VaultAccess({ onAuthenticated }: { onAuthenticated: (vau
         {vaults.length > 0 && <Button type="button" variant="outline" disabled={busy} onClick={() => { setCreating(value => !value); setPassword(''); setError(''); }}>
           {creating ? 'Choose existing vault' : 'Create another vault'}
         </Button>}
-        {touchIdAvailable && <Button type="button" variant="outline" disabled={busy} onClick={() => void verifyTouchId()}>
-          <Fingerprint size={14}/> Verify Touch ID
-        </Button>}
+
       </motion.div>
     </motion.form>
 
     <motion.div variants={accessItem} className="flex items-start gap-2 border-t border-border bg-black/15 px-5 py-4 text-[11px] leading-5 text-slate-500 sm:px-6">
       <ShieldCheck size={14} className="mt-0.5 shrink-0 text-blue-300"/>
-      Password authentication remains the cryptographic fallback. Touch ID verification uses macOS Local Authentication; Black Vault never receives or stores fingerprint data.
+      Your password unlocks the vault. On supported Macs, Touch ID additionally confirms permanent vault deletion. Black Vault never receives or stores fingerprint data.
     </motion.div>
   </motion.section>;
 }

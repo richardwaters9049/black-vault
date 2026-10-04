@@ -56,17 +56,17 @@ jobs:
           - name: "macOS arm64"
             os: macos-14
             bundles: "dmg"
-            artifact_name: "black-vault-0.1.0-macos-arm64"
+            artifact_name: "black-vault-${{ github.sha }}-macos-arm64"
             artifact_path: "desktop/src-tauri/target/release/bundle/dmg/*.dmg"
           - name: "Windows x64"
             os: windows-2025
             bundles: "nsis"
-            artifact_name: "black-vault-0.1.0-windows-x64"
+            artifact_name: "black-vault-${{ github.sha }}-windows-x64"
             artifact_path: "desktop/src-tauri/target/release/bundle/nsis/*-setup.exe"
           - name: "Linux x64"
             os: ubuntu-24.04
             bundles: "appimage,deb"
-            artifact_name: "black-vault-0.1.0-linux-x64"
+            artifact_name: "black-vault-${{ github.sha }}-linux-x64"
             artifact_path: |
               desktop/src-tauri/target/release/bundle/appimage/*.AppImage
               desktop/src-tauri/target/release/bundle/deb/*.deb

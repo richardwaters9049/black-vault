@@ -1,33 +1,23 @@
 # Cross-platform support
 
-**Release target:** Black Vault 0.1.0
-**Platforms:** macOS, Windows and Linux.
+**Updated:** 4 October 2026. **Current candidate:** 0.2.0-rc.1.
 
-Black Vault uses Tauri 2 with a Rust core and React/Vite UI. This document records cross-platform engineering evidence for the portfolio milestone; it is not a public distribution/support commitment.
-
-| Platform | Automated source/build gate | Native packaged GUI acceptance | Distribution |
+| Platform | Historical v0.1.0 evidence | Current candidate evidence | Current hands-on acceptance |
 | --- | --- | --- | --- |
-| macOS Apple Silicon | CI tests and DMG packaging pass | Hands-on packaged GUI acceptance passed | Ad-hoc signed; public notarisation not pursued |
-| Windows x64 | CI tests and NSIS packaging pass | Not claimed as hands-on accepted | Package retained as engineering evidence |
-| Linux x64 | CI tests and AppImage/DEB packaging pass | Not claimed as hands-on accepted | Packages retained as engineering evidence |
+| macOS arm64 | CI/DMG and packaged GUI passed | Local gate, Keychain and app build/signature passed; release CI pending | Pending current-candidate walkthrough |
+| Windows x64 | CI tests/NSIS passed | Release CI/credential acceptance pending | Not claimed |
+| Linux x64 | CI tests/AppImage/DEB passed | Release CI pending; Secret Service requires an active desktop session | Not claimed |
 
-The Rust storage implementation uses `#[cfg(unix)]` for Unix permission and `O_NOFOLLOW` hardening. Windows therefore follows portable Rust filesystem semantics but does **not** inherit Unix mode-bit protections. Windows ACL/reparse-point behaviour remains an explicit limitation if the project is ever reconsidered for public Windows distribution.
+The previous release remains documented in [v0.1.0 validation](v0.1.0-validation.md). Current results live in [v0.2.0 validation](v0.2.0-validation.md), with a [manual acceptance checklist](v0.2.0-manual-acceptance.md). Historical results do not automatically validate newer code.
 
-The root `start.sh` is a macOS/Unix development convenience and is not the product launcher. End users launch the platform-native Tauri application. Windows development should use the npm/Tauri commands from `desktop/package.json`.
+## CI policy
 
-## Native acceptance matrix
+PRs and `main` use one Ubuntu runner for frontend tests/build, Rust tests, formatting and strict Clippy. No native package is built there. `release/**` pushes and manual dispatch run macOS arm64, Windows x64 and Linux x64 package jobs; superseded runs are cancelled. Artifacts use the tested commit SHA in their names, preventing stale release-version labels.
 
-On **each** operating system, use disposable data and verify:
+macOS Keychain and Windows Credential Manager acceptance tests use isolated temporary credentials. Linux Secret Service acceptance remains a separate desktop-session test; ordinary headless Linux CI success does not establish it.
 
-1. First launch and vault creation.
-2. Wrong master password rejected; correct password unlocks.
-3. Native file picker and drag/drop import.
-4. Encryption/decryption without plaintext persistence inside vault storage.
-5. Nested vault creation, wrong/correct PIN, parent → nested and nested → parent transfer.
-6. Restore and conflict-preservation behaviour.
-7. Sign-out/relaunch and five-minute inactivity lock.
-8. Window resize/minimum size, keyboard navigation and reduced-motion behaviour.
-9. Back up the entire quiescent vault storage, restore into a disposable profile, relaunch and unlock.
-10. Installer/package launch through the OS security mechanism.
+## Platform limits
 
-Do not present Windows or Linux CI/package success as equivalent to hands-on target-OS security acceptance. The project is not currently planned for public distribution.
+Unix mode-bit/no-follow hardening is platform-specific; Windows ACL/reparse-point acceptance remains separate. `start.sh` is a Unix development convenience; Windows users use the npm/Tauri commands in `desktop/`. The configured macOS minimum is 13.3 and native local evidence targets Apple Silicon.
+
+The macOS app is ad-hoc signed. Developer ID/notarisation, Windows distribution signing and public support commitments are outside this internal portfolio candidate. CI compile/package success is not equivalent to native GUI/security acceptance on each operating system.

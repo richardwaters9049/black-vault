@@ -62,10 +62,6 @@ export default function VaultAccess({ onAuthenticated }: { onAuthenticated: (vau
     if (busy || !confirmationMatches) return;
     setBusy(true); setError(''); setBiometricMessage('');
     try {
-      if (touchIdAvailable) {
-        const result = await native.authenticateBiometric();
-        if (!result.authenticated) return;
-      }
       await native.deleteLockedVault(selected, confirmation);
       const remaining = vaults.filter(vault => vault.id !== selected);
       setVaults(remaining);

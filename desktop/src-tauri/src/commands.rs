@@ -381,6 +381,8 @@ pub fn delete_locked_vault(
     vault_id: String,
     confirmation: String,
 ) -> Result<(), crate::vault::VaultError> {
+    crate::biometric::authorize_destructive_action()
+        .map_err(|_| crate::vault::VaultError::destructive_auth_required())?;
     store.delete_locked(&vault_id, &confirmation)
 }
 

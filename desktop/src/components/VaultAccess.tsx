@@ -19,7 +19,7 @@ export default function VaultAccess({ onAuthenticated }: { onAuthenticated: (vau
   const [selected, setSelected] = useState('');
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
-  const [password, setPassword] = useState(import.meta.env.DEV ? (import.meta.env.VITE_DEV_VAULT_PASSWORD ?? '') : '');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -62,10 +62,6 @@ export default function VaultAccess({ onAuthenticated }: { onAuthenticated: (vau
     if (busy || !confirmationMatches) return;
     setBusy(true); setError(''); setBiometricMessage('');
     try {
-      if (touchIdAvailable) {
-        const result = await native.authenticateBiometric();
-        if (!result.authenticated) return;
-      }
       await native.deleteLockedVault(selected, confirmation);
       const remaining = vaults.filter(vault => vault.id !== selected);
       setVaults(remaining);

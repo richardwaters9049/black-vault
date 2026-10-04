@@ -14,7 +14,6 @@ let vaults: VaultSummary[];
 let locks: number;
 let invalidPassword: boolean;
 let vaultFileReads: number;
-let biometricAttempts: number;
 let deletedVaults: number;
 
 beforeEach(async () => {
@@ -24,12 +23,11 @@ beforeEach(async () => {
   locks = 0;
   invalidPassword = false;
   vaultFileReads = 0;
-  biometricAttempts = 0;
   deletedVaults = 0;
   mockIPC((command, args) => {
     if (command === 'get_desktop_info') return { appName: 'Black Vault', version: '0.1.0', platform: 'macos', architecture: 'aarch64' };
     if (command === 'get_biometric_status') return { available: true, kind: 'touch_id', platform: 'macos' };
-    if (command === 'authenticate_biometric') { biometricAttempts += 1; return { authenticated: true }; }
+    if (command === 'authenticate_biometric') return { authenticated: true };
     if (command === 'delete_locked_vault') { deletedVaults += 1; vaults = vaults.filter(vault => vault.id !== String((args as { vaultId: string }).vaultId)); return null; }
     if (command === 'lock_vault') {
       locks += 1;
@@ -56,7 +54,7 @@ beforeEach(async () => {
   root = createRoot(host);
   await act(async () => { root.render(<App />); });
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 async function ready() {
   await act(async () => { await vi.advanceTimersByTimeAsync(2800); });
@@ -117,18 +115,16 @@ it('rejects an incorrect password without revealing the dashboard', async () => 
 });
 
 
-it('requires exact confirmation and fresh Touch ID before deleting a locked vault', async () => {
+it('requires exact confirmation before requesting native destructive deletion', async () => {
   vaults = [{ id, name: null, isLocked: true }];
   await ready();
   await click('Decryption');
   await click('Delete this vault');
   expect(deletedVaults).toBe(0);
-  expect(biometricAttempts).toBe(0);
 
   await input('Delete vault confirmation', `DELETE ${id}`);
   await click('Authenticate & permanently delete');
 
-  expect(biometricAttempts).toBe(1);
   expect(deletedVaults).toBe(1);
   expect(host.textContent).toContain('Vault permanently deleted from this device.');
 });
@@ -145,4 +141,22 @@ it('shows and hides the creation password without changing its value', async () 
   await click('Hide');
   expect(password?.type).toBe('password');
   expect(password?.value).toBe('a unique disposable test password');
+});
+
+
+it('starts both operation tabs with an empty password even with a development password configured', async () => {
+  vi.stubEnv('DEV', true);
+  vi.stubEnv('VITE_DEV_VAULT_PASSWORD', 'must-not-be-prefilled');
+  await act(async () => { root.unmount(); });
+  root = createRoot(host);
+  await act(async () => { root.render(<App />); });
+  await ready();
+
+  for (const tab of ['Encryption', 'Decryption']) {
+    await click(tab);
+    const password = host.querySelector<HTMLInputElement>('input[aria-label="Vault password"]');
+    expect(password).not.toBeNull();
+    expect(password?.value).toBe('');
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+  }
 });

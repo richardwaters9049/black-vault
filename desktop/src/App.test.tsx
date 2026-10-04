@@ -14,6 +14,8 @@ let vaults: VaultSummary[];
 let locks: number;
 let invalidPassword: boolean;
 let vaultFileReads: number;
+let biometricAttempts: number;
+let deletedVaults: number;
 
 beforeEach(async () => {
   vi.useFakeTimers();
@@ -22,8 +24,13 @@ beforeEach(async () => {
   locks = 0;
   invalidPassword = false;
   vaultFileReads = 0;
+  biometricAttempts = 0;
+  deletedVaults = 0;
   mockIPC((command, args) => {
     if (command === 'get_desktop_info') return { appName: 'Black Vault', version: '0.1.0', platform: 'macos', architecture: 'aarch64' };
+    if (command === 'get_biometric_status') return { available: true, kind: 'touch_id', platform: 'macos' };
+    if (command === 'authenticate_biometric') { biometricAttempts += 1; return { authenticated: true }; }
+    if (command === 'delete_locked_vault') { deletedVaults += 1; vaults = vaults.filter(vault => vault.id !== String((args as { vaultId: string }).vaultId)); return null; }
     if (command === 'lock_vault') {
       locks += 1;
       vaults = vaults.map(vault => ({ ...vault, isLocked: true, name: null }));
@@ -107,6 +114,23 @@ it('rejects an incorrect password without revealing the dashboard', async () => 
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('Incorrect vault password');
   expect(host.querySelector<HTMLInputElement>('input[aria-label="Vault password"]')?.value).toBe('');
   expect(host.textContent).not.toContain('Encrypt and decrypt your files.');
+});
+
+
+it('requires exact confirmation and fresh Touch ID before deleting a locked vault', async () => {
+  vaults = [{ id, name: null, isLocked: true }];
+  await ready();
+  await click('Decryption');
+  await click('Delete this vault');
+  expect(deletedVaults).toBe(0);
+  expect(biometricAttempts).toBe(0);
+
+  await input('Delete vault confirmation', `DELETE ${id}`);
+  await click('Authenticate & permanently delete');
+
+  expect(biometricAttempts).toBe(1);
+  expect(deletedVaults).toBe(1);
+  expect(host.textContent).toContain('Vault permanently deleted from this device.');
 });
 
 it('shows and hides the creation password without changing its value', async () => {

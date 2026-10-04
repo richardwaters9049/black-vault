@@ -44,7 +44,7 @@ function project(lon: number, lat: number, turn: number, tilt: number, radius: n
   const z = Math.sin(lat) * Math.sin(tilt) + depth * Math.cos(tilt);
   return { x: x * radius, y: -y * radius, z };
 }
-export default function AuthGlobe() {
+export default function AuthGlobe({ cinematic = false }: { cinematic?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const element = canvas.current;
@@ -53,13 +53,27 @@ export default function AuthGlobe() {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
     let frame = 0; let previous = 0; let angle = -0.3; let entranceStart = 0;
     const render = (now: number) => {
-      if (now - previous < 32 && previous !== 0) { frame = requestAnimationFrame(render); return; }
-      if (previous && !reduce.matches) angle += Math.min(now - previous, 100) * 0.00012;
+      const delta = previous ? Math.min(now - previous, 100) : 0;
+      if (!cinematic && delta < 32 && previous !== 0) { frame = requestAnimationFrame(render); return; }
       previous = now;
-      if (!entranceStart) entranceStart = now;
-      const entrance = reduce.matches ? 1 : Math.min((now - entranceStart) / 1450, 1);
-      const spin = reduce.matches ? 0 : -Math.PI * 1.3 * Math.pow(1 - entrance, 3);
-      const turn = angle + spin;
+      if (!entranceStart) entranceStart = now + (cinematic ? 2050 : 0);
+      const elapsed = Math.max(now - entranceStart, 0);
+
+      let turn: number;
+      if (cinematic) {
+        // One uninterrupted accelerating rotation for the full camera push.
+        const seconds = elapsed / 1000;
+        const baseVelocity = 1.15;
+        const acceleration = 0.72;
+        turn = reduce.matches
+          ? angle
+          : angle + baseVelocity * seconds + 0.5 * acceleration * seconds * seconds;
+      } else {
+        if (!reduce.matches) angle += delta * 0.00012;
+        const entrance = reduce.matches ? 1 : Math.min(elapsed / 1450, 1);
+        const spin = reduce.matches ? 0 : -Math.PI * 1.3 * Math.pow(1 - entrance, 3);
+        turn = angle + spin;
+      }
       const width = element.clientWidth;
       const height = element.clientHeight;
       if (width === 0 || height === 0) return;
@@ -181,6 +195,6 @@ export default function AuthGlobe() {
     const changed = () => { cancelAnimationFrame(frame); previous = 0; frame = requestAnimationFrame(render); };
     reduce.addEventListener('change', changed);
     return () => { cancelAnimationFrame(frame); reduce.removeEventListener('change', changed); };
-  }, []);
+  }, [cinematic]);
   return <canvas ref={canvas} aria-hidden="true" className="absolute inset-0 size-full" />;
 }

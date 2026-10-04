@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { motion, useReducedMotion, type Variants } from 'framer-motion';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -10,6 +11,16 @@ import { errorMessage, formatFileSize, native, type VaultFile } from '@/lib/nati
 const VAULT_FILE_DRAG_TYPE = 'application/x-black-vault-encrypted-file';
 type Mode = 'encrypt' | 'decrypt';
 type Phase = 'idle' | 'working' | 'success' | 'error';
+
+const filesContainer: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } },
+};
+
+const filesItem: Variants = {
+  hidden: { opacity: 0, y: 12, scale: 0.997 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } },
+};
 
 export default function VaultFiles({ vaultId, operation, chosenExample, chosenDecrypt, onFilesChange, onDecryptedChange }: {
   vaultId: string;
@@ -23,6 +34,7 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
   const [decryptedFiles, setDecryptedFiles] = useState<VaultFile[]>([]);
   const [mode, setMode] = useState<Mode>(operation ?? 'encrypt');
   const fixedMode = operation !== undefined;
+  const reduceMotion = useReducedMotion();
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
   const [selection, setSelection] = useState<{ mode: Mode; id: string; name: string } | null>(null);
@@ -217,15 +229,21 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
     else decryptFile(selection.id);
     setSelection(null);
   }
-  return <section aria-label={mode === 'encrypt' ? 'File encryption' : 'File decryption'} className={fixedMode ? '' : 'mt-7 border-t border-border pt-5'}>
-    {!fixedMode && <div role="tablist" aria-label="File operations" className="grid grid-cols-2 gap-2 rounded-xl border border-blue-400/10 bg-[#080f1a] p-1.5">
+  return <motion.section
+    aria-label={mode === 'encrypt' ? 'File encryption' : 'File decryption'}
+    className={fixedMode ? '' : 'mt-7 border-t border-border pt-5'}
+    variants={filesContainer}
+    initial={reduceMotion ? false : 'hidden'}
+    animate="show"
+  >
+    {!fixedMode && <motion.div variants={filesItem} role="tablist" aria-label="File operations" className="grid grid-cols-2 gap-2 rounded-xl border border-blue-400/10 bg-[#080f1a] p-1.5">
       {(['encrypt', 'decrypt'] as const).map(tab => <button key={tab} type="button" role="tab" aria-selected={mode === tab} disabled={busy} onClick={() => changeMode(tab)}
         className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-xs transition-colors ${mode === tab ? 'border border-blue-400/20 bg-blue-500/15 text-sky-200' : 'text-slate-400 hover:text-white'}`}>
         {tab === 'encrypt' ? <FileLock2 size={15} /> : <LockKeyhole size={15} />}{tab === 'encrypt' ? 'Encryption' : 'Decryption'}
       </button>)}
-    </div>}
-    <div role={fixedMode ? undefined : 'tabpanel'} className={fixedMode ? '' : 'mt-4'}>
-      <div ref={dropZone} onDragOver={dragOver} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(false); }} onDrop={drop}
+    </motion.div>}
+    <motion.div variants={filesItem} role={fixedMode ? undefined : 'tabpanel'} className={fixedMode ? '' : 'mt-4'}>
+      <motion.div variants={filesItem} ref={dropZone} onDragOver={dragOver} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(false); }} onDrop={drop}
         className={`relative rounded-xl border border-dashed p-5 text-center transition-all duration-200 sm:p-7 ${over ? 'scale-[1.01] border-sky-300 bg-blue-500/15 shadow-[0_0_35px_#3b82f620]' : 'border-blue-400/25 bg-[#0b1422]'}`}>
         <div className={`mx-auto grid size-12 place-items-center rounded-xl border border-blue-400/20 bg-blue-400/10 text-blue-300 ${phase === 'working' ? 'bv-operation-working' : ''}`}>
           {phase === 'success' ? <CheckCircle2 size={23} className="text-emerald-300" /> : phase === 'error' ? <ShieldX size={23} className="text-red-300" /> : mode === 'encrypt' ? <ScanSearch size={23} /> : <Download size={23} />}
@@ -244,11 +262,12 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
           <div className="h-1 overflow-hidden rounded-full bg-blue-400/10"><div className="bv-operation-progress h-full w-1/3 rounded-full bg-sky-400" /></div>
           <p className="mt-2 text-[11px] text-sky-300">{mode === 'encrypt' ? 'Scanning → Encrypting → Vault' : 'Authenticating → Decrypting → Verified'}</p>
         </div>}
-      </div>
-      <div aria-live="polite" role={phase === 'error' ? 'alert' : 'status'} className={`mt-3 min-h-6 rounded-lg px-3 py-2 text-xs leading-5 transition-all duration-300 ${phase === 'success' ? 'bv-operation-confirm border border-emerald-400/20 bg-emerald-500/5 text-emerald-300' : phase === 'error' ? 'border border-red-400/20 bg-red-500/5 text-red-300' : 'text-slate-400'}`}>
+      </motion.div>
+      <motion.div variants={filesItem} aria-live="polite" role={phase === 'error' ? 'alert' : 'status'} className={`mt-3 min-h-6 rounded-lg px-3 py-2 text-xs leading-5 transition-all duration-300 ${phase === 'success' ? 'bv-operation-confirm border border-emerald-400/20 bg-emerald-500/5 text-emerald-300' : phase === 'error' ? 'border border-red-400/20 bg-red-500/5 text-red-300' : 'text-slate-400'}`}>
         {phase === 'success' && <ShieldCheck size={14} className="mr-2 inline" />}{status}
-      </div>
-      <div className="mt-5 flex items-center justify-between gap-3"><h4 className="flex items-center gap-2 text-xs font-medium"><FileLock2 size={14} className="text-sky-400"/> {mode === 'encrypt' ? 'Encrypted vault files' : 'Decrypted vault files'}</h4><span className="font-mono text-[10px] text-slate-500">{mode === 'encrypt' ? files.length + ' stored' : decryptedFiles.length + ' verified this session'}</span></div>
+      </motion.div>
+      <motion.div variants={filesItem} className="mt-5 flex items-center justify-between gap-3"><h4 className="flex items-center gap-2 text-xs font-medium"><FileLock2 size={14} className="text-sky-400"/> {mode === 'encrypt' ? 'Encrypted vault files' : 'Decrypted vault files'}</h4><span className="font-mono text-[10px] text-slate-500">{mode === 'encrypt' ? files.length + ' stored' : decryptedFiles.length + ' verified this session'}</span></motion.div>
+      <motion.div variants={filesItem}>
       {mode === 'encrypt' ? (files.length === 0 ? <p className="mt-3 text-xs text-slate-500">No encrypted files yet. Start with an example or choose a file.</p> :
         <div className="mt-3 space-y-2">{files.map(file => <div key={file.id} className="flex items-center gap-3 rounded-lg border border-border bg-[#0b111b] p-3">
           <FileLock2 size={16} className="shrink-0 text-blue-300"/><div className="min-w-0 flex-1"><p className="break-all text-xs font-medium">{file.name}</p><p className="mt-1 font-mono text-[10px] text-slate-500">{formatFileSize(file.sizeBytes)} · Encrypted in vault</p></div>
@@ -257,7 +276,8 @@ export default function VaultFiles({ vaultId, operation, chosenExample, chosenDe
         <div className="mt-3 space-y-2">{decryptedFiles.map(file => <div key={file.id} className="flex items-center gap-3 rounded-lg border border-emerald-400/15 bg-[#0b111b] p-3">
           <CheckCircle2 size={16} className="shrink-0 text-emerald-300"/><div className="min-w-0 flex-1"><p className="break-all text-xs font-medium">{file.name}</p><p className="mt-1 font-mono text-[10px] text-slate-500">{formatFileSize(file.sizeBytes)} · Verified in memory · No plaintext copy</p></div>
         </div>)}</div>)}
-      <p className="mt-4 text-[11px] leading-5 text-slate-500">A completed animation confirms the native operation has returned successfully; it is not a simulated security result. Local scanning is a limited static policy check, not comprehensive malware detection. Decryption verifies contents in zeroising Rust memory; the vault retains only encrypted files.</p>
-    </div>
-  </section>;
+      </motion.div>
+      <motion.p variants={filesItem} className="mt-4 text-[11px] leading-5 text-slate-500">A completed animation confirms the native operation has returned successfully; it is not a simulated security result. Local scanning is a limited static policy check, not comprehensive malware detection. Decryption verifies contents in zeroising Rust memory; the vault retains only encrypted files.</motion.p>
+    </motion.div>
+  </motion.section>;
 }
